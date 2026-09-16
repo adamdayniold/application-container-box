@@ -1,7 +1,8 @@
 # docker-compose.yml (Development)
 services:
-  application-container-box:
+  application:
     build: .
+    image: application-box-blueprint:1.0
     container_name: application-container-box
     ports:
       - "3000:3000"
@@ -16,7 +17,7 @@ services:
       - mongodb-box
 
   mongodb-box:
-    image: mongo:latest
+    image: mongo:7.0
     container_name: mongodb-box
     ports:
       - "27017:27017"
@@ -27,7 +28,7 @@ services:
       - MONGO_INITDB_ROOT_PASSWORD=root
 
   mongodb-express:
-    image: mongo-express:latest
+    image: mongo-express:1.0.2
     container_name: mongodb-express
     ports:
       - "8081:8081"
