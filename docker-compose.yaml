@@ -1,39 +1,42 @@
 # docker-compose.yml (Development)
 services:
-  application-container-box:
-    build: .
+  application:
+    build:
+      context: .
+      target: dev # 🦖 FIXED: Indented exactly under context
     container_name: application-container-box
     ports:
       - "3000:3000"
     volumes:
       - .:/app
-      - /app/node_modules # Prevents local machine's node_modules from overwriting the container's
-      - /app/.next # Protects Next.js build cache inside the container
+      - /app/node_modules
+      - /app/.next
     environment:
-      - MONGODB_URI=mongodb://admin:root@mongodb-box:27017
-      - MONGODB_DB=user-account
+      - MONGODB_URI=mongodb://${MONGODB_USERNAME}:${MONGODB_PASSWORD}@mongodb-box:27017
+      - MONGODB_DB=${MONGODB_DB}
     depends_on:
       - mongodb-box
 
   mongodb-box:
-    image: mongo:latest
+    image: mongo:7.0
     container_name: mongodb-box
     ports:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
     environment:
-      - MONGO_INITDB_ROOT_USERNAME=admin
-      - MONGO_INITDB_ROOT_PASSWORD=root
+      - MONGO_INITDB_ROOT_USERNAME=${MONGODB_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGODB_PASSWORD}
+      - MONGO_INITDB_DATABASE=${MONGODB_DB}
 
   mongodb-express:
-    image: mongo-express:latest
+    image: mongo-express:1.0.2
     container_name: mongodb-express
     ports:
       - "8081:8081"
     environment:
-      - ME_CONFIG_MONGODB_ADMINUSERNAME=admin
-      - ME_CONFIG_MONGODB_ADMINPASSWORD=root
+      - ME_CONFIG_MONGODB_ADMINUSERNAME=${MONGODB_ADMINUSERNAME}
+      - ME_CONFIG_MONGODB_ADMINPASSWORD=${MONGODB_ADMINPASSWORD}
       - ME_CONFIG_MONGODB_SERVER=mongodb-box
 
 volumes:
