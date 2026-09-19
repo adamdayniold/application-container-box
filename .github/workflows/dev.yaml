@@ -15,10 +15,10 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "20"
           cache: npm
@@ -36,7 +36,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup docker buildx
         uses: docker/setup-buildx-action@v3
@@ -57,7 +57,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Docker Build
         uses: docker/setup-buildx-action@v3
@@ -79,21 +79,25 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # 💡 FUTURE STAGING SSH DEPLOYMENT GOES HERE
-      # - name: Deploy to Staging Server via SSH
-      #   uses: appleboy/ssh-action@master
-      #   with:
-      #     host: ${{ secrets.STAGING_SERVER_IP }}
-      #     username: ${{ secrets.STAGING_SERVER_USER }}
-      #     key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
-      #     script: docker pull ...
+      - name: Deploy to Staging Server via SSH
+        uses: appleboy/ssh-action@1.2.0
+        with:
+          host: ${{ secrets.TUNNEL_SSH_HOST }}
+          username: ${{ secrets.SERVER_USER_STAGE }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_STAGE }}
+          port: ${{ secrets.SERVER_PORT_STAGE }}
+          script: |
+            cd /var/www/nextjs-app
+            docker login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_TOKEN }}
+            docker compose pull
+            docker compose up -d
 
   deploy-production:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
