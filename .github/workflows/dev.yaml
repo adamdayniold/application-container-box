@@ -81,10 +81,8 @@ jobs:
 
       - name: Install Cloudflare CLI
         run: |
-          sudo mkdir -p --mode=0755 /etc/apt/keyrings
-          curl -fsSL https://cloudflare.com | sudo tee /etc/apt/keyrings/cloudflare-main.gpg >/dev/null
-          echo "deb [signed-by=/etc/apt/keyrings/cloudflare-main.gpg] https://cloudflare.com stable main" | sudo tee /etc/apt/sources.list.d/cloudflared.list
-          sudo apt-get update && sudo apt-get install cloudflared -y
+          wget -q https://github.com
+           sudo dpkg -i cloudflared-linux-amd64.deb
 
       - name: Configure SSH Proxy Profile
         run: |
