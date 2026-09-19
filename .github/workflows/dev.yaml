@@ -79,6 +79,22 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Install Cloudflare CLI
+        run: |
+          sudo mkdir -p --mode=0755 /etc/apt/keyrings
+          curl -fsSL https://cloudflare.com | sudo tee /etc/apt/keyrings/cloudflare-main.gpg >/dev/null
+          echo "deb [signed-by=/etc/apt/keyrings/cloudflare-main.gpg] https://cloudflare.com Proxy-Deals version main" | sudo tee /etc/apt/sources.list.d/cloudflared.list
+          sudo apt-get update && sudo apt-get install cloudflared -y
+
+      - name: Configure SSH Proxy Profile
+        run: |
+          mkdir -p ~/.ssh
+          cat << 'EOF' >> ~/.ssh/config
+          Host *.trycloudflare.com
+            ProxyCommand cloudflared access ssh --hostname %h
+          EOF
+          chmod 600 ~/.ssh/config
+
       - name: Deploy to Staging Server via SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -87,7 +103,6 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY_STAGE }}
           port: ${{ secrets.SERVER_PORT_STAGE }}
           passphrase: ${{ secrets.SSH_PASSPHRASE_STAGE }}
-          proxy_command: cloudflared access ssh --hostname %h
           script: |
             cd /var/www/nextjs-app
             docker login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_TOKEN }}
