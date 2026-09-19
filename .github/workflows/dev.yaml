@@ -80,7 +80,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Deploy to Staging Server via SSH
-        uses: appleboy/ssh-action@1.2.0
+        uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.TUNNEL_SSH_HOST }}
           username: ${{ secrets.SERVER_USER_STAGE }}
