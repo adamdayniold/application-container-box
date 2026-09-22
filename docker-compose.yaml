@@ -1,10 +1,11 @@
 # docker-compose.yml (Development)
+name: application
+
 services:
-  application:
+  crud-mongodb:
     build:
       context: .
       target: dev # 🦖 FIXED: Indented exactly under context
-    container_name: application-container-box
     ports:
       - "3000:3000"
     volumes:
@@ -17,9 +18,8 @@ services:
     depends_on:
       - mongodb-box
 
-  mongodb-box:
+  mongodb:
     image: mongo:7.0
-    container_name: mongodb-box
     ports:
       - "27017:27017"
     volumes:
@@ -31,7 +31,6 @@ services:
 
   mongodb-express:
     image: mongo-express:1.0.2
-    container_name: mongodb-express
     ports:
       - "8081:8081"
     environment:

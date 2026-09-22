@@ -75,22 +75,23 @@ jobs:
           file: ./Dockerfile
           push: true
           # Replaces 'your-dockerhub-username' dynamically; assigns staging or production tag
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/nextjs-app:stage
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/crud-mongodb:stage
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Deploy to Staging Server via SSH
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.TUNNEL_SSH_HOST }}
-          username: ${{ secrets.SERVER_USER_STAGE }}
-          key: ${{ secrets.SSH_PRIVATE_KEY_STAGE }}
-          port: ${{ secrets.SERVER_PORT_STAGE }}
-          script: |
-            cd /var/www/nextjs-app
-            docker login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_TOKEN }}
-            docker compose pull
-            docker compose up -d
+      # - name: Deploy to Staging Server via SSH
+      #   uses: appleboy/ssh-action@v1.2.0
+      #   with:
+      #     host: ${{ secrets.TUNNEL_SSH_HOST }}
+      #     username: ${{ secrets.SERVER_USER_STAGE }}
+      #     key: ${{ secrets.SSH_PRIVATE_KEY_STAGE }}
+      #     port: ${{ secrets.SERVER_PORT_STAGE }}
+      #     passphrase: ${{ secrets.SSH_PASSPHRASE_STAGE }}
+      #     script: |
+      #       cd /var/www/nextjs-app
+      #       docker login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_TOKEN }}
+      #       docker compose pull
+      #       docker compose up -d
 
   deploy-production:
     if: github.ref == 'refs/heads/main'
@@ -114,7 +115,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/nextjs-app:production
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/crud-mongodb:production
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
