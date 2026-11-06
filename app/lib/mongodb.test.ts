@@ -21,7 +21,7 @@ describe("MongoDB connection", () => {
 
   it("requires a MongoDB URI", async () => {
     delete process.env.MONGODB_URI;
-    const { getDb } = require("./mongodb") as typeof import("./mongodb");
+    const { getDb } = await import("./mongodb");
     await expect(getDb()).rejects.toThrow("Set MONGODB_URI");
   });
 
@@ -32,7 +32,7 @@ describe("MongoDB connection", () => {
     process.env.MONGODB_URI = "mongodb://example.test/canvas";
     process.env.MONGODB_DB = "contacts-test";
 
-    const { getDb } = require("./mongodb") as typeof import("./mongodb");
+    const { getDb } = await import("./mongodb");
 
     await expect(getDb()).resolves.toBe(db);
     expect(mockConnect).toHaveBeenCalledTimes(1);
