@@ -68,12 +68,16 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Build and Push Staging Image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           push: true
+          platforms: linux/amd64,linux/arm64
           # Replaces 'your-dockerhub-username' dynamically; assigns staging or production tag
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/crud-mongodb:stage
           cache-from: type=gha
