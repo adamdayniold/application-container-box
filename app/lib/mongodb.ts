@@ -12,12 +12,8 @@ export async function getDb() {
     throw new Error("Set MONGODB_URI before using the contacts API.");
   }
 
-  const clientPromise = globalForMongo.mongoClientPromise ?? new MongoClient(uri).connect();
+  globalForMongo.mongoClientPromise ??= new MongoClient(uri).connect();
 
-  if (process.env.NODE_ENV !== "production") {
-    globalForMongo.mongoClientPromise = clientPromise;
-  }
-
-  const client = await clientPromise;
+  const client = await globalForMongo.mongoClientPromise;
   return client.db(databaseName);
 }

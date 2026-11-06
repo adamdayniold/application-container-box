@@ -6,6 +6,7 @@ jest.mock("mongodb", () => ({
 
 const originalUri = process.env.MONGODB_URI;
 const originalDatabase = process.env.MONGODB_DB;
+const originalNodeEnv = process.env.NODE_ENV;
 
 describe("MongoDB connection", () => {
   beforeEach(() => {
@@ -17,6 +18,10 @@ describe("MongoDB connection", () => {
   afterAll(() => {
     process.env.MONGODB_URI = originalUri;
     process.env.MONGODB_DB = originalDatabase;
+  });
+
+  afterEach(() => {
+    (process.env as Record<string, string | undefined>).NODE_ENV = originalNodeEnv;
   });
 
   it("requires a MongoDB URI", async () => {
@@ -37,5 +42,17 @@ describe("MongoDB connection", () => {
     await expect(getDb()).resolves.toBe(db);
     expect(mockConnect).toHaveBeenCalledTimes(1);
     expect(mockDb).toHaveBeenCalledWith("contacts-test");
+  });
+
+  it("reuses one connection across calls, also in production", async () => {
+    (process.env as Record<string, string>).NODE_ENV = "production";
+    mockConnect.mockResolvedValue({ db: jest.fn().mockReturnValue({}) });
+    process.env.MONGODB_URI = "mongodb://example.test/canvas";
+
+    const { getDb } = await import("./mongodb");
+    await getDb();
+    await getDb();
+
+    expect(mockConnect).toHaveBeenCalledTimes(1);
   });
 });
