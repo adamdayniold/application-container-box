@@ -1,7 +1,7 @@
 # ==========================================
 # 1. BASE STAGE (Shared OS setup)
 # ==========================================
-FROM node:24-alpine AS base
+FROM node:25-alpine AS base
 WORKDIR /app
 # Check https://github.com to understand why libc6-compat might be needed.
 RUN apk add --no-cache libc6-compat
@@ -31,7 +31,7 @@ RUN npm run build
 # ==========================================
 # 4. PRODUCTION / STAGING RUNTIME STAGE
 # ==========================================
-FROM node:24-alpine AS prod
+FROM node:25-alpine AS prod
 WORKDIR /app
 
 ENV NODE_ENV=production
