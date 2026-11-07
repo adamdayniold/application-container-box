@@ -2,7 +2,7 @@
 
 A Next.js + MongoDB contacts CRUD app, packaged as a multi-arch container image and shipped through a GitHub Actions pipeline that tests once, builds once and promotes the same image to production. It runs in the cluster defined by [mywebapp-k8s-helm](https://github.com/adamdayniold/mywebapp-k8s-helm).
 
-> **Status:** work in progress. The pipeline in `.github/workflows/ci-cd.yaml` is written and passes workflow validation, but GitHub Actions is currently disabled for this repo, so it has not run yet. Sections below say what is verified and what is planned.
+> **Status:** work in progress. The pipeline in `.github/workflows/ci-cd.yaml` has run for real: checks on `development`, a multi-arch build on `stage`, and a promotion to `main` that reused the `stage` image without rebuilding (`:production` and `:stage` have the same image digest). The hotfix path is written but has not been exercised yet. Sections below say what is verified and what is planned.
 
 ## What this shows
 
@@ -122,23 +122,28 @@ The workflow is `.github/workflows/ci-cd.yaml`. It reads two repository secrets,
 
 | Job | Runs on | What it does |
 | --- | --- | --- |
-| `test` | Pull requests, `development`, `stage` | `npm ci`, lint, `tsc --noEmit`, Jest, `npm audit --omit=dev --audit-level=high` |
+| `test` | Pull requests, `development`, `stage` | `npm ci`, lint, `next typegen` + `tsc --noEmit`, Jest, `npm audit --omit=dev --audit-level=high` |
 | `build-dev` | `development` | Builds the `dev` target, pushes nothing |
 | `build-stage` | `stage` | Builds amd64 + arm64; pushes `:sha-<commit>` and `:stage` with revision and source labels |
 | `detect` | `main` | Checks whether `:sha-<commit>` exists in Docker Hub |
 | `promote` | `main`, image found | Retags the image as `:production` |
 | `hotfix` | `main`, image missing | Runs the checks, then builds and pushes `:sha-<commit>` and `:production` |
 
-Provenance and SBOM attestations are turned off for now, because they add manifest entries that complicate the retag.
+`next typegen` runs before the typecheck because Next.js generates the `RouteContext` and `LayoutProps` types into `.next/`, which is not in the repository.
+
+Provenance and SBOM attestations are turned off for now, because they add manifest entries that complicate the retag. The published image index contains exactly two manifests, `linux/amd64` and `linux/arm64`.
+
+Dependabot (`.github/dependabot.yaml`) checks npm, Docker and GitHub Actions weekly and opens pull requests against `development`.
 
 ## Known limitations and next steps
 
-- The pipeline has not run yet (GitHub Actions is disabled until the workflow is reviewed).
-- Branch protection on `main` is not set up yet.
+- The hotfix path has not been run yet.
+- Branch protection on `main` is not set up yet, so a direct push to `main` is possible (it would take the hotfix path).
+- The cluster does not use the new image yet: the Helm chart still points at the moving `:stage` tag with `IfNotPresent`, instead of immutable `sha-<commit>` tags.
 - No `/api/health` endpoint yet; the cluster probes use `/`.
 - No authentication.
 - Remaining `npm audit` findings are in dev-only tooling, not in the image.
-- Planned: Dependabot, image scanning, a screenshot and badges.
+- Planned: image scanning, a screenshot and badges.
 
 ## Related repositories
 
