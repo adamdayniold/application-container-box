@@ -2,14 +2,14 @@
 
 A Next.js + MongoDB contacts CRUD app, packaged as a container image (`linux/amd64` by default, `linux/arm64` on demand) and shipped through a GitHub Actions pipeline that tests once, builds once and promotes the same image to production. It runs in the cluster defined by [mywebapp-k8s-helm](https://github.com/adamdayniold/mywebapp-k8s-helm).
 
-> **Status:** work in progress. The pipeline in `.github/workflows/ci-cd.yaml` has run for real: checks on `development`, a multi-arch build on `stage`, and a promotion to `main` that reused the `stage` image without rebuilding (`:production` and `:stage` have the same image digest). The hotfix path has been exercised too (a commit pushed directly to `main` was tested, built and pushed). Those runs built both `linux/amd64` and `linux/arm64`; the pipeline has since been changed to build `linux/amd64` only by default, and that change has not run on `stage` yet. Sections below say what is verified and what is planned.
+> **Status:** work in progress. The pipeline in `.github/workflows/ci-cd.yaml` has run for real: checks on `development`, a build on `stage`, and a promotion to `main` that reused the `stage` image without rebuilding (`:production` and `:stage` have the same image digest). The hotfix path has been exercised too (a commit pushed directly to `main` was tested, built and pushed). The first runs built both `linux/amd64` and `linux/arm64` (15 to 18 minutes); the pipeline now builds `linux/amd64` only by default, and that has run end to end: `stage` took 3 min 20 s and the `main` promotion 36 s. Sections below say what is verified and what is planned.
 
 ## What this shows
 
 - **Multi-stage Dockerfile:** `base`, `dev`, `builder` and `prod` stages. The production image uses Next.js `standalone` output and runs as a non-root user.
 - **Build once, promote the same image:** an image is built on `stage` and tagged `:sha-<commit>`. A release to `main` retags that image as `:production` instead of rebuilding it.
 - **Tested hotfix path:** a commit that reaches `main` without an image is linted, type-checked and tested before it is built and pushed.
-- **`linux/amd64` by default, `linux/arm64` on demand:** the arm64 half of a multi-arch build runs under QEMU emulation on the amd64 runner and took 15 to 18 minutes, so it is opt-in (see [CI/CD](#cicd)).
+- **`linux/amd64` by default, `linux/arm64` on demand:** the arm64 half of a multi-arch build runs under QEMU emulation on the amd64 runner and took 15 to 18 minutes; amd64 only takes about 3 minutes on `stage`, so arm64 is opt-in (see [CI/CD](#cicd)).
 - **Jest tests and lint** gate the pipeline.
 - **One Node version (24 LTS)** from `.nvmrc`, used by local development, CI and the image.
 
@@ -131,7 +131,7 @@ The workflow is `.github/workflows/ci-cd.yaml`. It reads two repository secrets,
 
 `next typegen` runs before the typecheck because Next.js generates the `RouteContext` and `LayoutProps` types into `.next/`, which is not in the repository.
 
-Provenance and SBOM attestations are turned off for now, because they add manifest entries that complicate the retag. The images published by the first runs were indexes with exactly two manifests, `linux/amd64` and `linux/arm64`.
+Provenance and SBOM attestations are turned off for now, because they add manifest entries that complicate the retag. The images published by the first runs were indexes with exactly two manifests, `linux/amd64` and `linux/arm64`; amd64-only builds contain a single platform.
 
 To get an arm64 image: Actions, "CI/CD Docker Pipeline", Run workflow, branch `stage`, tick `arm64`. This rebuilds the same commit and replaces `:sha-<commit>` and `:stage` with a multi-arch index, so run it before promoting to `main`. `promote` copies whatever `:sha-<commit>` holds, so production is amd64 only unless the arm64 build was run first. The hotfix path always builds amd64 only, so an emergency build does not wait for emulation.
 
