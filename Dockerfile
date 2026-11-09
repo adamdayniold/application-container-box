@@ -3,7 +3,7 @@
 # ==========================================
 FROM node:24-alpine AS base
 WORKDIR /app
-# Check https://github.com to understand why libc6-compat might be needed.
+# Alpine uses musl; libc6-compat lets Next.js's native modules (sharp) run
 RUN apk add --no-cache libc6-compat
 COPY package*.json ./
 
@@ -22,9 +22,8 @@ CMD ["npm", "run", "dev"]
 # ==========================================
 FROM base AS builder
 WORKDIR /app
+RUN --mount=type=cache,target=/root/.npm npm ci
 COPY . .
-# Next.js requires an active npm install to build the application
-RUN npm ci
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
@@ -39,7 +38,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 # Create a non-root system user for security
 RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN adduser --system --uid 1001 --ingroup nodejs nextjs
 
 # CRITICAL: Next.js output standalone feature must be enabled in next.config.js
 COPY --from=builder /app/public ./public
