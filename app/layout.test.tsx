@@ -1,4 +1,3 @@
-import { render, screen } from "@testing-library/react";
 import RootLayout, { metadata } from "./layout";
 
 describe("RootLayout", () => {
@@ -6,8 +5,15 @@ describe("RootLayout", () => {
     expect(metadata).toMatchObject({ title: "Canvas Contacts", description: "A simple contact management workspace." });
   });
 
-  it("renders children inside the document body", () => {
-    render(<RootLayout params={Promise.resolve({})}><p>Page content</p></RootLayout>);
-    expect(screen.getByText("Page content")).toBeInTheDocument();
+  it("wraps children in html and body", () => {
+    const child = <p>Page content</p>;
+    const tree = RootLayout({ children: child } as never);
+
+    expect(tree.type).toBe("html");
+    expect(tree.props.lang).toBe("en");
+
+    const body = tree.props.children;
+    expect(body.type).toBe("body");
+    expect(body.props.children).toBe(child);
   });
 });
