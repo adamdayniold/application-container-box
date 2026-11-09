@@ -2,7 +2,7 @@
 
 A Next.js + MongoDB contacts CRUD app, packaged as a container image (`linux/amd64` by default, `linux/arm64` on demand) and shipped through a GitHub Actions pipeline that tests once, builds once and promotes the same image to production. It runs in the cluster defined by [mywebapp-k8s-helm](https://github.com/adamdayniold/mywebapp-k8s-helm).
 
-> **Status:** work in progress. The pipeline in `.github/workflows/ci-cd.yaml` has run for real: checks on `development`, a build on `stage`, and a promotion to `main` that reused the `stage` image without rebuilding (`:production` and `:stage` have the same image digest). The hotfix path has been exercised too (a commit pushed directly to `main` was tested, built and pushed). The first runs built both `linux/amd64` and `linux/arm64` (15 to 18 minutes); the pipeline now builds `linux/amd64` only by default, and that has run end to end: `stage` took 3 min 20 s and the `main` promotion 36 s. Sections below say what is verified and what is planned.
+> **Status:** work in progress. The pipeline in `.github/workflows/ci-cd.yaml` has run for real: checks on `development`, a build on `stage`, and a promotion to `main` that reused the `stage` image without rebuilding (`:production` and `:stage` have the same image digest). The hotfix path has been exercised too (a commit pushed directly to `main` was tested, built and pushed). The first runs built both `linux/amd64` and `linux/arm64` (15 to 18 minutes); the pipeline now builds `linux/amd64` only by default, and that has run end to end: `stage` took 3 min 20 s and the `main` promotion 36 s. The image built on `stage` (with the health endpoints) was then pinned by its `sha-<commit>` tag in the Helm chart, verified running in the k3d cluster, and promoted to `:production` by the same retag (same manifest, not rebuilt). Sections below say what is verified and what is planned.
 
 ## What this shows
 
@@ -10,6 +10,8 @@ A Next.js + MongoDB contacts CRUD app, packaged as a container image (`linux/amd
 - **Build once, promote the same image:** an image is built on `stage` and tagged `:sha-<commit>`. A release to `main` retags that image as `:production` instead of rebuilding it.
 - **Tested hotfix path:** a commit that reaches `main` without an image is linted, type-checked and tested before it is built and pushed.
 - **`linux/amd64` by default, `linux/arm64` on demand:** the arm64 half of a multi-arch build runs under QEMU emulation on the amd64 runner and took 15 to 18 minutes; amd64 only takes about 3 minutes on `stage`, so arm64 is opt-in (see [CI/CD](#cicd)).
+- **Health endpoints for Kubernetes probes:** a liveness route that never touches the database and a readiness route that pings MongoDB (HTTP 503 when it is unreachable), so a Mongo outage stops traffic without restart-looping the app.
+- **Immutable image tags in the cluster:** the Helm chart pins `sha-<commit>`, so the running image is provable and reproducible, and the node cannot keep a stale cached `:stage`.
 - **Jest tests and lint** gate the pipeline.
 - **One Node version (24 LTS)** from `.nvmrc`, used by local development, CI and the image.
 
@@ -62,7 +64,7 @@ Trade-off: a hotfix skips verification on the `stage` cluster. It passes the aut
 ## Repository layout
 
 ```
-app/                  Next.js App Router: pages, api/contacts, lib/ (MongoDB access)
+app/                  Next.js App Router: pages, api/contacts, api/health, lib/ (MongoDB access)
 Dockerfile            Multi-stage build (base, dev, builder, prod)
 docker-compose.yaml   Local development: app + MongoDB + mongo-express
 .github/workflows/    ci-cd.yaml: the pipeline
@@ -108,6 +110,8 @@ The image is the same for every environment. Configuration comes only from these
 | `GET` | `/api/contacts/[id]` | Read one contact |
 | `PUT` | `/api/contacts/[id]` | Update a contact |
 | `DELETE` | `/api/contacts/[id]` | Delete a contact |
+| `GET` | `/api/health` | Liveness: returns `200 {"status":"ok"}`, no database access |
+| `GET` | `/api/health/ready` | Readiness: pings MongoDB; `200 {"status":"ready"}`, or `503 {"status":"unavailable"}` if it cannot |
 
 ### Tests and lint
 
@@ -142,8 +146,8 @@ Dependabot (`.github/dependabot.yaml`) checks npm, Docker and GitHub Actions wee
 - The hotfix path has run once, on an empty commit. It is verified, but the fix procedure (back-merge to `stage` and `development`) is manual.
 - Production images are `linux/amd64` only unless the arm64 build is run on demand.
 - Branch protection on `main` is not set up yet, so a direct push to `main` is possible (it would take the hotfix path).
-- The cluster does not use the new image yet: the Helm chart still points at the moving `:stage` tag with `IfNotPresent`, instead of immutable `sha-<commit>` tags.
-- No `/api/health` endpoint yet; the cluster probes use `/`.
+- The Helm chart pins an immutable `sha-<commit>` tag, but the tag is bumped by hand after each `stage` build. Planned: Flux image automation (needs a sortable tag format from CI).
+- The cluster runs the `stage` build; the Helm chart does not reference `:production` yet, so promotion to `main` is a retag in the registry and does not itself change what the cluster runs.
 - No authentication.
 - Remaining `npm audit` findings are in dev-only tooling, not in the image.
 - Planned: image scanning, a screenshot and badges.
