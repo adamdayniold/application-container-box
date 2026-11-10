@@ -69,28 +69,34 @@ Trade-off: a hotfix skips verification on the `stage` cluster. It passes the aut
 app/                  Next.js App Router: pages, api/contacts, api/health, lib/ (MongoDB access)
 Dockerfile            Multi-stage build (base, dev, builder, prod)
 docker-compose.yaml   Local development: app + MongoDB + mongo-express
+.env.example          Template for the compose credentials (copy to .env)
 .github/workflows/    ci-cd.yaml: the pipeline
+docs/                 Screenshot (decision and troubleshooting pages planned)
 jest.config.ts        Test configuration
 .nvmrc                Node version used everywhere
+LICENSE               MIT
 ```
 
 ## Getting started
 
 Prerequisites: Node 24 (for example via nvm) and Docker.
 
+With Docker Compose (app, MongoDB and mongo-express), the easiest way:
+
+```bash
+cp .env.example .env     # dev-only credentials; .env is git-ignored
+docker compose up --build
+```
+
+The app is then at http://localhost:3000 and mongo-express at http://localhost:8081. The credentials in `.env.example` are for local development only.
+
+Or without Compose, with your own MongoDB (for example the compose one, published on `localhost:27017`):
+
 ```bash
 nvm use            # reads .nvmrc
 npm ci
-npm run dev        # needs MONGODB_URI, see below
+npm run dev        # needs MONGODB_URI and MONGODB_DB, put them in .env.local (see .env.example)
 ```
-
-Or with Docker Compose (app, MongoDB and mongo-express):
-
-```bash
-docker compose up
-```
-
-The credentials in `docker-compose.yaml` are for local development only.
 
 ### Environment variables
 
@@ -152,8 +158,12 @@ Dependabot (`.github/dependabot.yaml`) checks npm, Docker and GitHub Actions wee
 - The cluster runs the `stage` build; the Helm chart does not reference `:production` yet, so promotion to `main` is a retag in the registry and does not itself change what the cluster runs.
 - No authentication.
 - Remaining `npm audit` findings are in dev-only tooling, not in the image.
-- Planned: image scanning, a screenshot and badges.
+- Planned: image scanning and badges.
 
 ## Related repositories
 
 - [mywebapp-k8s-helm](https://github.com/adamdayniold/mywebapp-k8s-helm): deploys this image with Flux on k3d.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
