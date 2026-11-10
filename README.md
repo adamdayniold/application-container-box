@@ -71,7 +71,7 @@ Dockerfile            Multi-stage build (base, dev, builder, prod)
 docker-compose.yaml   Local development: app + MongoDB + mongo-express
 .env.example          Template for the compose credentials (copy to .env)
 .github/workflows/    ci-cd.yaml: the pipeline
-docs/                 Screenshot and decisions (troubleshooting page planned)
+docs/                 Screenshot, decisions and troubleshooting
 jest.config.ts        Test configuration
 .nvmrc                Node version used everywhere
 LICENSE               MIT
@@ -167,6 +167,7 @@ Dependabot (`.github/dependabot.yaml`) checks npm, Docker and GitHub Actions wee
 ## More detail
 
 - [docs/decisions.md](docs/decisions.md): why the pipeline and image work the way they do, and what each choice costs.
+- [docs/troubleshooting.md](docs/troubleshooting.md): problems hit while building the pipeline and image, with causes and fixes.
 
 ## License
 
