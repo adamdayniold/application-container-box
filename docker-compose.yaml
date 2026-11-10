@@ -13,10 +13,10 @@ services:
       - /app/node_modules
       - /app/.next
     environment:
-      - MONGODB_URI=mongodb://${MONGODB_USERNAME}:${MONGODB_PASSWORD}@mongodb-box:27017
+      - MONGODB_URI=mongodb://${MONGODB_USERNAME}:${MONGODB_PASSWORD}@mongodb:27017
       - MONGODB_DB=${MONGODB_DB}
     depends_on:
-      - mongodb-box
+      - mongodb
 
   mongodb:
     image: mongo:7.0
