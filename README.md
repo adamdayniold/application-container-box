@@ -4,6 +4,8 @@ A Next.js + MongoDB contacts CRUD app, packaged as a container image (`linux/amd
 
 > **Status:** work in progress. The pipeline in `.github/workflows/ci-cd.yaml` has run for real: checks on `development`, a build on `stage`, and a promotion to `main` that reused the `stage` image without rebuilding (`:production` and `:stage` have the same image digest). The hotfix path has been exercised too (a commit pushed directly to `main` was tested, built and pushed). The first runs built both `linux/amd64` and `linux/arm64` (15 to 18 minutes); the pipeline now builds `linux/amd64` only by default, and that has run end to end: `stage` took 3 min 20 s and the `main` promotion 36 s. The image built on `stage` (with the health endpoints) was then pinned by its `sha-<commit>` tag in the Helm chart, verified running in the k3d cluster, and promoted to `:production` by the same retag (same manifest, not rebuilt). Sections below say what is verified and what is planned.
 
+![Contacts page of the app, showing four sample contacts in a table with search, status filters and an "Add a contact" form](docs/ui-screenshot.png)
+
 ## What this shows
 
 - **Multi-stage Dockerfile:** `base`, `dev`, `builder` and `prod` stages. The production image uses Next.js `standalone` output (about 75 MB) and runs as a non-root user (uid 1001). Dependencies install in their own cached layer before the source is copied, so a code change rebuilds in seconds instead of reinstalling everything, and a `.dockerignore` keeps local files, secrets and docs out of the build context.
