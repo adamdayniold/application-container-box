@@ -55,4 +55,18 @@ describe("MongoDB connection", () => {
 
     expect(mockConnect).toHaveBeenCalledTimes(1);
   });
+
+  it("retries the connection after a failed attempt", async () => {
+    const db = {};
+    mockConnect
+      .mockRejectedValueOnce(new Error("connect failed"))
+      .mockResolvedValueOnce({ db: jest.fn().mockReturnValue(db) });
+    process.env.MONGODB_URI = "mongodb://example.test/canvas";
+
+    const { getDb } = await import("./mongodb");
+
+    await expect(getDb()).rejects.toThrow("connect failed");
+    await expect(getDb()).resolves.toBe(db);
+    expect(mockConnect).toHaveBeenCalledTimes(2);
+  });
 });
