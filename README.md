@@ -71,7 +71,7 @@ Dockerfile            Multi-stage build (base, dev, builder, prod)
 docker-compose.yaml   Local development: app + MongoDB + mongo-express
 .env.example          Template for the compose credentials (copy to .env)
 .github/workflows/    ci-cd.yaml: the pipeline
-docs/                 Screenshot (decision and troubleshooting pages planned)
+docs/                 Screenshot and decisions (troubleshooting page planned)
 jest.config.ts        Test configuration
 .nvmrc                Node version used everywhere
 LICENSE               MIT
@@ -163,6 +163,10 @@ Dependabot (`.github/dependabot.yaml`) checks npm, Docker and GitHub Actions wee
 ## Related repositories
 
 - [mywebapp-k8s-helm](https://github.com/adamdayniold/mywebapp-k8s-helm): deploys this image with Flux on k3d.
+
+## More detail
+
+- [docs/decisions.md](docs/decisions.md): why the pipeline and image work the way they do, and what each choice costs.
 
 ## License
 
