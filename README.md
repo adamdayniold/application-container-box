@@ -6,7 +6,7 @@ A Next.js + MongoDB contacts CRUD app, packaged as a container image (`linux/amd
 
 ## What this shows
 
-- **Multi-stage Dockerfile:** `base`, `dev`, `builder` and `prod` stages. The production image uses Next.js `standalone` output and runs as a non-root user.
+- **Multi-stage Dockerfile:** `base`, `dev`, `builder` and `prod` stages. The production image uses Next.js `standalone` output (about 75 MB) and runs as a non-root user (uid 1001). Dependencies install in their own cached layer before the source is copied, so a code change rebuilds in seconds instead of reinstalling everything, and a `.dockerignore` keeps local files, secrets and docs out of the build context.
 - **Build once, promote the same image:** an image is built on `stage` and tagged `:sha-<commit>`. A release to `main` retags that image as `:production` instead of rebuilding it.
 - **Tested hotfix path:** a commit that reaches `main` without an image is linted, type-checked and tested before it is built and pushed.
 - **`linux/amd64` by default, `linux/arm64` on demand:** the arm64 half of a multi-arch build runs under QEMU emulation on the amd64 runner and took 15 to 18 minutes; amd64 only takes about 3 minutes on `stage`, so arm64 is opt-in (see [CI/CD](#cicd)).
