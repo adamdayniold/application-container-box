@@ -2,7 +2,7 @@
 
 A Next.js + MongoDB contacts CRUD app, packaged as a container image (`linux/amd64` by default, `linux/arm64` on demand) and shipped through a GitHub Actions pipeline that tests once, builds once and promotes the same image to production. It runs in the cluster defined by [mywebapp-k8s-helm](https://github.com/adamdayniold/mywebapp-k8s-helm).
 
-> **Status:** work in progress. The pipeline in `.github/workflows/ci-cd.yaml` has run for real: checks on `development`, a build on `stage`, and a promotion to `main` that reused the `stage` image without rebuilding (`:production` and `:stage` have the same image digest). The hotfix path has been exercised too (a commit pushed directly to `main` was tested, built and pushed). The first runs built both `linux/amd64` and `linux/arm64` (15 to 18 minutes); the pipeline now builds `linux/amd64` only by default, and that has run end to end: `stage` took 3 min 20 s and the `main` promotion 36 s. The image built on `stage` (with the health endpoints) was then pinned by its `sha-<commit>` tag in the Helm chart, verified running in the k3d cluster, and promoted to `:production` by the same retag (same manifest, not rebuilt). Sections below say what is verified and what is planned.
+> **Status:** work in progress. The pipeline (test, build once, promote, tested hotfix path) has run end to end, and the image runs in a k3d cluster pinned by its `sha-<commit>` tag. See [CI/CD](#cicd) and [docs/decisions.md](docs/decisions.md). Still to do: image scanning, badges, more tests, and branch protection on `main` (not enforced while the repository is private).
 
 ![Contacts page of the app, showing four sample contacts in a table with search, status filters and an "Add a contact" form](docs/ui-screenshot.png)
 
@@ -49,7 +49,8 @@ Normal release (the image was already built and verified on `stage`):
 
 ```bash
 git checkout main && git pull
-git merge --ff-only stage
+git fetch
+git merge --ff-only origin/stage
 git push origin main
 ```
 
@@ -103,7 +104,7 @@ npm run dev        # needs MONGODB_URI and MONGODB_DB, put them in .env.local (s
 | Variable | Purpose |
 | --- | --- |
 | `MONGODB_URI` | MongoDB connection string. Required; the app errors without it. |
-| `MONGODB_DB` | Database name. |
+| `MONGODB_DB` | Database name. Defaults to `canvas` if unset. |
 | `PORT` | Port the production image listens on (`3000`). |
 | `HOSTNAME` | Interface the production image binds to (`0.0.0.0`). |
 
@@ -153,7 +154,7 @@ Dependabot (`.github/dependabot.yaml`) checks npm, Docker and GitHub Actions wee
 
 - The hotfix path has run once, on an empty commit. It is verified, but the fix procedure (back-merge to `stage` and `development`) is manual.
 - Production images are `linux/amd64` only unless the arm64 build is run on demand.
-- Branch protection on `main` is not set up yet, so a direct push to `main` is possible (it would take the hotfix path).
+- Branch protection on `main` (the `protect-main` ruleset: status check `test`, linear history, no force pushes or deletions) is configured but not enforced while the repository is private, so a direct push to `main` is possible (it would take the hotfix path).
 - The Helm chart pins an immutable `sha-<commit>` tag, but the tag is bumped by hand after each `stage` build. Planned: Flux image automation (needs a sortable tag format from CI).
 - The cluster runs the `stage` build; the Helm chart does not reference `:production` yet, so promotion to `main` is a retag in the registry and does not itself change what the cluster runs.
 - No authentication.

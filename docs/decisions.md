@@ -12,7 +12,7 @@ Short notes on why the pipeline and the image work the way they do, and what eac
 
 ## Fast-forward only, never the GitHub merge button
 
-**Decision:** `stage` is promoted to `main` from the command line with `git merge --ff-only stage`.
+**Decision:** `stage` is promoted to `main` from the command line with `git fetch` and `git merge --ff-only origin/stage`.
 
 **Why:** A fast-forward keeps the same commit hash on both branches, so the image built for `stage` can be found by its `:sha-<commit>` tag. GitHub's merge, squash and rebase buttons all create a new commit, so no image would exist for it and the pipeline would rebuild.
 
