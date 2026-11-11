@@ -1,6 +1,7 @@
 /** @jest-environment node */
 
 import { createContact, isContactInput, listContacts } from "@/app/lib/contacts";
+import { metrics } from "@/app/lib/metrics";
 import { GET, POST } from "./route";
 
 jest.mock("@/app/lib/contacts", () => ({
@@ -39,5 +40,13 @@ describe("/api/contacts", () => {
     expect(response.status).toBe(201);
     expect(mockCreateContact).toHaveBeenCalledWith(input);
     await expect(response.json()).resolves.toEqual(contact);
+  });
+
+  it("records metrics for requests, under the route pattern", async () => {
+    metrics.requests.reset();
+    mockIsContactInput.mockReturnValue(false);
+    await POST(new Request("http://localhost/api/contacts", { method: "POST", body: "{}" }));
+    const text = await metrics.registry.metrics();
+    expect(text).toMatch(/http_requests_total\{[^}]*method="POST"[^}]*route="\/api\/contacts"[^}]*status="400"[^}]*\} 1/);
   });
 });
