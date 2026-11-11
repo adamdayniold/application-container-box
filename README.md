@@ -126,6 +126,7 @@ The image is the same for every environment. Configuration comes only from these
 
 ```bash
 npm test
+npm run coverage
 npm run lint
 ```
 
