@@ -14,6 +14,7 @@ A Next.js + MongoDB contacts CRUD app, packaged as a container image (`linux/amd
 - **`linux/amd64` by default, `linux/arm64` on demand:** the arm64 half of a multi-arch build runs under QEMU emulation on the amd64 runner and took 15 to 18 minutes; amd64 only takes about 3 minutes on `stage`, so arm64 is opt-in (see [CI/CD](#cicd)).
 - **Health endpoints for Kubernetes probes:** a liveness route that never touches the database and a readiness route that pings MongoDB (HTTP 503 when it is unreachable), so a Mongo outage stops traffic without restart-looping the app.
 - **Prometheus metrics:** `/api/metrics` exposes process metrics plus a request counter and a latency histogram for the contacts API, labelled by method, route pattern and status. The Helm repo scrapes it with a ServiceMonitor and shows it on a provisioned Grafana dashboard.
+- **Structured JSON logs:** one JSON line per request (method, route pattern, status, duration, and the error message when a handler throws), written to stdout. Alloy ships it to Loki, where `| json` turns each field into something to filter on. Request bodies are never logged.
 - **Immutable image tags in the cluster:** the Helm chart pins `sha-<commit>`, so the running image is provable and reproducible, and the node cannot keep a stale cached `:stage`.
 - **Jest tests and lint** gate the pipeline.
 - **One Node version (24 LTS)** from `.nvmrc`, used by local development, CI and the image.
@@ -108,6 +109,7 @@ npm run dev        # needs MONGODB_URI and MONGODB_DB, put them in .env.local (s
 | `MONGODB_DB` | Database name. Defaults to `canvas` if unset. |
 | `PORT` | Port the production image listens on (`3000`). |
 | `HOSTNAME` | Interface the production image binds to (`0.0.0.0`). |
+| `LOG_LEVEL` | Optional. Set to `silent` to turn the JSON request logs off (the Jest setup does this). Unset by default. |
 
 The image is the same for every environment. Configuration comes only from these variables at runtime.
 
@@ -162,6 +164,7 @@ Dependabot (`.github/dependabot.yaml`) checks npm, Docker and GitHub Actions wee
 - The cluster runs the `stage` build; the Helm chart does not reference `:production` yet, so promotion to `main` is a retag in the registry and does not itself change what the cluster runs.
 - No authentication.
 - `/api/metrics` has no authentication and is reachable through the Gateway, because the HTTPRoute sends every path to the app. Fine for a local demo; in a real setup it would be restricted to the cluster network.
+- Logs are one line per request with no request id or user context. Errors carry only the message; the stack trace comes from Next.js's own unstructured output. The health and metrics routes are not logged on purpose.
 - Remaining `npm audit` findings are in dev-only tooling, not in the image.
 - Planned: image scanning and badges.
 

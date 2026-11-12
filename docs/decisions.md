@@ -65,3 +65,11 @@ Short notes on why the pipeline and the image work the way they do, and what eac
 **Why:** A label per contact id would create a new time series for every contact, and Prometheus memory would grow without limit. The kubelet calls the health routes every 10 seconds, and counting scrapes of `/api/metrics` would make the metrics measure themselves, so both would only add noise.
 
 **Trade-off:** Two requests to different ids cannot be told apart in the metrics. That detail belongs in logs, not metrics.
+
+## Structured request logs, without bodies
+
+**Decision:** The app writes one JSON line per request (`time`, `level`, `msg`, `method`, `route`, `status`, `duration_ms`, and `error` when a handler throws) from the same wrapper that records the metrics. The level follows the status: 5xx is `error`, 4xx is `warn`, anything else is `info`. Request bodies, the health routes and `/api/metrics` are not logged. `LOG_LEVEL=silent` turns the logger off.
+
+**Why:** Alloy ships stdout to Loki, and `| json` turns each field into something to filter on. Bodies hold names and emails, and the kubelet probes would drown the useful lines (the same reasoning as for the metrics). `route` is the pattern, not the real URL.
+
+**Trade-off:** A hand-written logger of about 10 lines instead of a library such as pino: nothing to bundle or explain, but no log levels beyond `silent`, no redaction helpers and no request ids. Worth revisiting if the app grows.
