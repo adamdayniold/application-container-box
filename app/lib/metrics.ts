@@ -1,4 +1,5 @@
 import { Counter, Histogram, Registry, collectDefaultMetrics } from "prom-client";
+import { log } from "./logger";
 
 type Labels = "method" | "route" | "status";
 
@@ -37,7 +38,7 @@ function createMetrics(): Metrics {
 
 export const metrics = (globalForMetrics.metrics ??= createMetrics());
 
-// Wraps a route handler to count and time it. The handler's own signature is
+// Wraps a route handler to count, time and log it (one JSON log line per request). The handler's own signature is
 // kept, so Next's generated route types and the existing tests still fit.
 // `route` is the fixed pattern ("/api/contacts/[id]"), never the real URL:
 // one label value per contact id would grow Prometheus's memory without limit.
@@ -48,15 +49,27 @@ export function withMetrics<Args extends unknown[]>(
 ) {
   return async (...args: Args): Promise<Response> => {
     const end = metrics.duration.startTimer();
+    const started = performance.now();
     let status = 500; // a handler that throws counts as a 500
+    let error: unknown;
     try {
       const response = await handler(...args);
       status = response.status;
       return response;
+    } catch (e) {
+      error = e;
+      throw e;
     } finally {
       const labels = { method, route, status: String(status) };
       metrics.requests.inc(labels);
       end(labels);
+      log(status >= 500 ? "error" : status >= 400 ? "warn" : "info", "request", {
+        method,
+        route,
+        status,
+        duration_ms: Math.round(performance.now() - started),
+        ...(error === undefined ? {} : { error: error instanceof Error ? error.message : String(error) }),
+      });
     }
   };
 }

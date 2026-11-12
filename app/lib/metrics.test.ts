@@ -1,9 +1,13 @@
 /** @jest-environment node */
 import { metrics, withMetrics } from "./metrics";
+import { log } from "./logger";
+
+jest.mock("./logger");
 
 beforeEach(() => {
   metrics.requests.reset();
   metrics.duration.reset();
+  jest.mocked(log).mockClear();
 });
 
 it("counts and times a handled request", async () => {
@@ -28,4 +32,29 @@ it("counts a throwing handler as a 500 and rethrows", async () => {
   await expect(handler()).rejects.toThrow("boom");
   const text = await metrics.registry.metrics();
   expect(text).toMatch(/http_requests_total\{[^}]*route="\/api\/boom"[^}]*status="500"[^}]*\} 1/);
+});
+
+it("logs one line per request with route, status and duration", async () => {
+  const handler = withMetrics("GET", "/api/test", async () => new Response(null, { status: 204 }));
+  await handler();
+  expect(log).toHaveBeenCalledTimes(1);
+  expect(log).toHaveBeenCalledWith(
+    "info",
+    "request",
+    expect.objectContaining({ method: "GET", route: "/api/test", status: 204, duration_ms: expect.any(Number) }),
+  );
+});
+
+it("logs a 4xx response as a warning", async () => {
+  const handler = withMetrics("POST", "/api/test", async () => new Response(null, { status: 400 }));
+  await handler();
+  expect(log).toHaveBeenCalledWith("warn", "request", expect.objectContaining({ status: 400 }));
+});
+
+it("logs a throwing handler as an error with the message", async () => {
+  const handler = withMetrics("GET", "/api/boom", async () => {
+    throw new Error("boom");
+  });
+  await expect(handler()).rejects.toThrow("boom");
+  expect(log).toHaveBeenCalledWith("error", "request", expect.objectContaining({ status: 500, error: "boom" }));
 });
