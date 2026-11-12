@@ -13,6 +13,7 @@ A Next.js + MongoDB contacts CRUD app, packaged as a container image (`linux/amd
 - **Tested hotfix path:** a commit that reaches `main` without an image is linted, type-checked and tested before it is built and pushed.
 - **`linux/amd64` by default, `linux/arm64` on demand:** the arm64 half of a multi-arch build runs under QEMU emulation on the amd64 runner and took 15 to 18 minutes; amd64 only takes about 3 minutes on `stage`, so arm64 is opt-in (see [CI/CD](#cicd)).
 - **Health endpoints for Kubernetes probes:** a liveness route that never touches the database and a readiness route that pings MongoDB (HTTP 503 when it is unreachable), so a Mongo outage stops traffic without restart-looping the app.
+- **Prometheus metrics:** `/api/metrics` exposes process metrics plus a request counter and a latency histogram for the contacts API, labelled by method, route pattern and status. The Helm repo scrapes it with a ServiceMonitor and shows it on a provisioned Grafana dashboard.
 - **Immutable image tags in the cluster:** the Helm chart pins `sha-<commit>`, so the running image is provable and reproducible, and the node cannot keep a stale cached `:stage`.
 - **Jest tests and lint** gate the pipeline.
 - **One Node version (24 LTS)** from `.nvmrc`, used by local development, CI and the image.
@@ -67,7 +68,7 @@ Trade-off: a hotfix skips verification on the `stage` cluster. It passes the aut
 ## Repository layout
 
 ```
-app/                  Next.js App Router: pages, api/contacts, api/health, lib/ (MongoDB access)
+app/                  Next.js App Router: pages, api/contacts, api/health, api/metrics, lib/ (MongoDB access, metrics)
 Dockerfile            Multi-stage build (base, dev, builder, prod)
 docker-compose.yaml   Local development: app + MongoDB + mongo-express
 .env.example          Template for the compose credentials (copy to .env)
@@ -121,6 +122,7 @@ The image is the same for every environment. Configuration comes only from these
 | `DELETE` | `/api/contacts/[id]` | Delete a contact |
 | `GET` | `/api/health` | Liveness: returns `200 {"status":"ok"}`, no database access |
 | `GET` | `/api/health/ready` | Readiness: pings MongoDB; `200 {"status":"ready"}`, or `503 {"status":"unavailable"}` if it cannot |
+| `GET` | `/api/metrics` | Prometheus text format: process metrics, `http_requests_total` and `http_request_duration_seconds` for the contacts routes |
 
 ### Tests and lint
 
@@ -159,6 +161,7 @@ Dependabot (`.github/dependabot.yaml`) checks npm, Docker and GitHub Actions wee
 - The Helm chart pins an immutable `sha-<commit>` tag, but the tag is bumped by hand after each `stage` build. Planned: Flux image automation (needs a sortable tag format from CI).
 - The cluster runs the `stage` build; the Helm chart does not reference `:production` yet, so promotion to `main` is a retag in the registry and does not itself change what the cluster runs.
 - No authentication.
+- `/api/metrics` has no authentication and is reachable through the Gateway, because the HTTPRoute sends every path to the app. Fine for a local demo; in a real setup it would be restricted to the cluster network.
 - Remaining `npm audit` findings are in dev-only tooling, not in the image.
 - Planned: image scanning and badges.
 

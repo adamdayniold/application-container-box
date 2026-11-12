@@ -57,3 +57,11 @@ Short notes on why the pipeline and the image work the way they do, and what eac
 **Why:** Attestations add extra manifest entries to the image index, which would complicate the retag. Without them, `:production` wraps exactly the image that `:sha-<commit>` points at.
 
 **Trade-off:** The images carry no build provenance or SBOM attestations for now. Worth revisiting once the promotion path is settled.
+
+## Metrics use the route pattern as a label
+
+**Decision:** `http_requests_total` and `http_request_duration_seconds` are labelled with the fixed route pattern (for example `/api/contacts/[id]`), never the real URL. The health routes and `/api/metrics` itself are not counted.
+
+**Why:** A label per contact id would create a new time series for every contact, and Prometheus memory would grow without limit. The kubelet calls the health routes every 10 seconds, and counting scrapes of `/api/metrics` would make the metrics measure themselves, so both would only add noise.
+
+**Trade-off:** Two requests to different ids cannot be told apart in the metrics. That detail belongs in logs, not metrics.
