@@ -8,6 +8,7 @@ jest.mock("@/app/lib/contacts", () => ({
   createContact: jest.fn(),
   isContactInput: jest.fn(),
   listContacts: jest.fn(),
+  parseListQuery: jest.requireActual("@/app/lib/contacts").parseListQuery,
 }));
 
 const mockListContacts = jest.mocked(listContacts);
@@ -19,11 +20,13 @@ const contact = { ...input, id: "1", color: "violet" };
 describe("/api/contacts", () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it("returns all contacts", async () => {
-    mockListContacts.mockResolvedValue([contact]);
-    const response = await GET();
+  it("returns one page of contacts, using the query parameters", async () => {
+    const page = { items: [contact], total: 1, page: 2, limit: 5 };
+    mockListContacts.mockResolvedValue(page);
+    const response = await GET(new Request("http://localhost/api/contacts?page=2&limit=5&q=ada&status=Lead"));
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual([contact]);
+    expect(mockListContacts).toHaveBeenCalledWith({ page: 2, limit: 5, q: "ada", status: "Lead" });
+    await expect(response.json()).resolves.toEqual(page);
   });
 
   it("rejects invalid contact payloads", async () => {

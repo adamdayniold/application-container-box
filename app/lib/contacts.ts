@@ -1,13 +1,15 @@
-import { ObjectId } from "mongodb";
+import { Filter, ObjectId } from "mongodb";
 import { getDb } from "./mongodb";
 
 export type ContactStatus = "Active" | "Lead" | "Inactive";
 
 export type Contact = { id: string; name: string; email: string; company: string; role: string; status: ContactStatus; color: string };
 export type ContactInput = Omit<Contact, "id" | "color">;
+export type ListQuery = { page: number; limit: number; q: string; status?: ContactStatus };
 type ContactDocument = ContactInput & { _id: ObjectId; color: string };
 
 const colors = ["violet", "orange", "teal", "blue", "pink", "yellow"];
+const statuses: ContactStatus[] = ["Active", "Lead", "Inactive"];
 const maxLength = { name: 100, email: 254, company: 100, role: 100 };
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -24,9 +26,38 @@ function toObjectId(id: string) {
   return ObjectId.isValid(id) ? new ObjectId(id) : null;
 }
 
-export async function listContacts() {
-  const contacts = await (await collection()).find().sort({ _id: -1 }).toArray();
-  return contacts.map(serializeContact);
+function positiveInt(value: string | null, fallback: number) {
+  const number = Number(value);
+  return value !== null && Number.isInteger(number) && number >= 1 ? number : fallback;
+}
+
+function escapeRegex(text: string) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export async function listContacts({ page, limit, q, status }: ListQuery) {
+  const contacts = await collection();
+  const filter: Filter<ContactDocument> = {};
+  if (status) filter.status = status;
+  if (q) {
+    const pattern = { $regex: escapeRegex(q), $options: "i" };
+    filter.$or = [{ name: pattern }, { email: pattern }, { company: pattern }, { role: pattern }];
+  }
+  const [documents, total] = await Promise.all([
+    contacts.find(filter).sort({ _id: -1 }).skip((page - 1) * limit).limit(limit).toArray(),
+    contacts.countDocuments(filter),
+  ]);
+  return { items: documents.map(serializeContact), total, page, limit };
+}
+
+export async function getSummary() {
+  const contacts = await collection();
+  const [total, active, leads] = await Promise.all([
+    contacts.countDocuments({}),
+    contacts.countDocuments({ status: "Active" }),
+    contacts.countDocuments({ status: "Lead" }),
+  ]);
+  return { total, active, leads };
 }
 
 export async function getContact(id: string) {
@@ -74,5 +105,15 @@ export function isContactInput(value: unknown): value is ContactInput {
   });
   return textFieldsValid
     && emailPattern.test((input.email as string).trim())
-    && ["Active", "Lead", "Inactive"].includes(input.status as string);
+    && statuses.includes(input.status as ContactStatus);
+}
+
+export function parseListQuery(params: URLSearchParams): ListQuery {
+  const status = params.get("status");
+  return {
+    page: positiveInt(params.get("page"), 1),
+    limit: Math.min(positiveInt(params.get("limit"), 20), 100),
+    q: (params.get("q") ?? "").trim().slice(0, 100),
+    status: statuses.find((candidate) => candidate === status),
+  };
 }

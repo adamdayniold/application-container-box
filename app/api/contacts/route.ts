@@ -1,11 +1,12 @@
-import { createContact, isContactInput, listContacts } from "@/app/lib/contacts";
+import { createContact, isContactInput, listContacts, parseListQuery } from "@/app/lib/contacts";
 import { withMetrics } from "@/app/lib/metrics";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export const GET = withMetrics("GET", "/api/contacts", async () => {
-  return Response.json(await listContacts());
+export const GET = withMetrics("GET", "/api/contacts", async (request: Request) => {
+  const query = parseListQuery(new URL(request.url).searchParams);
+  return Response.json(await listContacts(query));
 });
 
 export const POST = withMetrics("POST", "/api/contacts", async (request: Request) => {

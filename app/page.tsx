@@ -1,57 +1,102 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import type { Contact, ContactInput } from "@/app/lib/contacts";
 
 type ContactForm = ContactInput;
 const emptyForm: ContactForm = { name: "", email: "", company: "", role: "", status: "Lead" };
+const PAGE_SIZE = 10;
 
 export default function Home() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [editing, setEditing] = useState<Contact | null>(null);
   const [form, setForm] = useState<ContactForm>(emptyForm);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [summary, setSummary] = useState({ total: 0, active: 0, leads: 0 });
+  const [reloadKey, setReloadKey] = useState(0);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const reload = () => setReloadKey((key) => key + 1);
+
   useEffect(() => {
-    async function loadContacts() {
+    const timer = setTimeout(() => { setDebouncedQuery(query); setPage(1); }, 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadSummary() {
       try {
-        const response = await fetch("/api/contacts");
+        const response = await fetch("/api/contacts/summary");
         if (!response.ok) throw new Error("Unable to load contacts.");
-        setContacts(await response.json());
+        const counts = await response.json();
+        if (!cancelled) setSummary(counts);
       } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : "Unable to load contacts.");
-      } finally { setIsLoading(false); }
+        if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Unable to load contacts.");
+      }
     }
-    void loadContacts();
-  }, []);
-  const visibleContacts = useMemo(() => contacts.filter((c) => [c.name, c.email, c.company, c.role].join(" ").toLowerCase().includes(query.toLowerCase()) && (statusFilter === "All" || c.status === statusFilter)), [contacts, query, statusFilter]);
+    void loadSummary();
+    return () => { cancelled = true; };
+  }, [reloadKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadList() {
+      try {
+        const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
+        if (debouncedQuery) params.set("q", debouncedQuery);
+        if (statusFilter !== "All") params.set("status", statusFilter);
+        const response = await fetch(`/api/contacts?${params}`);
+        if (!response.ok) throw new Error("Unable to load contacts.");
+        const list = await response.json();
+        if (cancelled) return;
+        if (list.items.length === 0 && list.total > 0 && page > 1) {
+          setPage(Math.ceil(list.total / PAGE_SIZE));
+          return;
+        }
+        setContacts(list.items);
+        setTotal(list.total);
+      } catch (loadError) {
+        if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Unable to load contacts.");
+      } finally { if (!cancelled) setIsLoading(false); }
+    }
+    void loadList();
+    return () => { cancelled = true; };
+  }, [reloadKey, debouncedQuery, statusFilter, page]);
+
   const openCreate = () => { setEditing(null); setForm(emptyForm); };
   const openEdit = (contact: Contact) => { setEditing(contact); setForm({ name: contact.name, email: contact.email, company: contact.company, role: contact.role, status: contact.status }); };
   const closePanel = () => { setEditing(null); setForm(emptyForm); };
+
   async function submitForm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError("");
     try {
       const response = await fetch(editing ? `/api/contacts/${editing.id}` : "/api/contacts", { method: editing ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Unable to save contact.");
-      setContacts((all) => editing ? all.map((contact) => contact.id === editing.id ? result : contact) : [result, ...all]);
+      if (!editing) setPage(1);
       closePanel();
+      reload();
     } catch (saveError) { setError(saveError instanceof Error ? saveError.message : "Unable to save contact."); }
   }
+
   async function deleteContact(contact: Contact) {
     if (!window.confirm(`Delete ${contact.name}? This cannot be undone.`)) return;
     setError("");
     try {
       const response = await fetch(`/api/contacts/${contact.id}`, { method: "DELETE" });
       if (!response.ok) throw new Error("Unable to delete contact.");
-      setContacts((all) => all.filter((item) => item.id !== contact.id));
       if (editing?.id === contact.id) closePanel();
+      reload();
     } catch (deleteError) { setError(deleteError instanceof Error ? deleteError.message : "Unable to delete contact."); }
   }
-  const activeCount = contacts.filter((c) => c.status === "Active").length;
-  const leadCount = contacts.filter((c) => c.status === "Lead").length;
+
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
   return <main className="app-shell">
     <aside className="sidebar">
       <div className="brand">
@@ -63,7 +108,7 @@ export default function Home() {
           <span>⌂</span> Overview
         </a>
         <a className="nav-item active" href="#contacts">
-          <span>♙</span> Contacts <b>{contacts.length}</b>
+          <span>♙</span> Contacts <b>{summary.total}</b>
         </a>
         <a className="nav-item" href="#companies">
           <span>▣</span> Companies
@@ -97,17 +142,17 @@ export default function Home() {
       <section className="stat-grid" aria-label="Contact summary">
         <article>
           <p>Total contacts</p>
-          <strong>{contacts.length}</strong>
+          <strong>{summary.total}</strong>
           <span className="stat-note positive">↗ 12% <em>vs last month</em></span>
         </article>
         <article>
           <p>Active contacts</p>
-          <strong>{activeCount}</strong>
-          <span className="stat-note">{contacts.length ? Math.round(activeCount / contacts.length * 100) : 0}% of total</span>
+          <strong>{summary.active}</strong>
+          <span className="stat-note">{summary.total ? Math.round(summary.active / summary.total * 100) : 0}% of total</span>
         </article>
         <article>
           <p>New leads</p>
-          <strong>{leadCount}</strong>
+          <strong>{summary.leads}</strong>
           <span className="stat-note">Ready to follow up</span>
         </article>
       </section>
@@ -118,7 +163,7 @@ export default function Home() {
             <input aria-label="Search contacts" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search contacts..." />
           </div>
           <div className="filter-row">
-            <span>Filter:</span>{["All", "Active", "Lead", "Inactive"].map((filter) => <button key={filter} onClick={() => setStatusFilter(filter)} className={statusFilter === filter ? "filter active-filter" : "filter"}>{filter}</button>)}
+            <span>Filter:</span>{["All", "Active", "Lead", "Inactive"].map((filter) => <button key={filter} onClick={() => { setStatusFilter(filter); setPage(1); }}>{filter}</button>)}
           </div>
         </div>
         <div className="table-scroll">
@@ -139,7 +184,7 @@ export default function Home() {
                   <div className="empty-state">Loading contacts…</div>
                 </td>
               </tr>
-               : visibleContacts.map((contact) => <tr key={contact.id}>
+               : contacts.map((contact) => <tr key={contact.id}>
                 <td>
                   <div className="contact-name">
                     <div className={`avatar avatar-${contact.color}`}>{initials(contact.name)}</div>
@@ -156,7 +201,7 @@ export default function Home() {
                   </div>
                 </td>
               </tr>)}
-              {!isLoading && visibleContacts.length === 0 && <tr>
+              {!isLoading && contacts.length === 0 && <tr>
                 <td colSpan={5}>
                   <div className="empty-state">No contacts match your search. Try another filter or add someone new.</div>
                 </td>
@@ -165,11 +210,11 @@ export default function Home() {
           </table>
         </div>
         <footer className="table-footer">
-          <span>Showing {visibleContacts.length} of {contacts.length} contacts</span>
+          <span>Showing {contacts.length} of {total} contacts</span>
           <div>
-            <button className="page-button" disabled>‹</button>
-            <button className="page-button current">1</button>
-            <button className="page-button" disabled>›</button>
+            <button className="page-button" aria-label="Previous page" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>‹</button>
+            <button className="page-button current" aria-current="page">{page}</button>
+            <button className="page-button" aria-label="Next page" disabled={page >= pageCount} onClick={() => setPage((current) => current + 1)}>›</button>
           </div>
         </footer>
       </section>

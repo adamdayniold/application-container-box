@@ -20,7 +20,7 @@ jest.mock("mongodb", () => {
 jest.mock("./mongodb", () => ({ getDb: jest.fn() }));
 
 import { ObjectId } from "mongodb";
-import { createContact, getContact, isContactInput, listContacts, removeContact, updateContact } from "./contacts";
+import { createContact, getContact, getSummary, isContactInput, listContacts, parseListQuery, removeContact, updateContact } from "./contacts";
 import { getDb } from "./mongodb";
 
 const mockGetDb = jest.mocked(getDb);
@@ -49,6 +49,7 @@ describe("contacts data helpers", () => {
     insertOne: jest.fn(),
     updateOne: jest.fn(),
     deleteOne: jest.fn(),
+    countDocuments: jest.fn(),
   };
 
   beforeEach(() => {
@@ -56,18 +57,48 @@ describe("contacts data helpers", () => {
     mockGetDb.mockResolvedValue({ collection: jest.fn().mockReturnValue(mockCollection) } as never);
   });
 
+  function mockListChain(documents: unknown[], total: number) {
+    const toArray = jest.fn().mockResolvedValue(documents);
+    const limit = jest.fn().mockReturnValue({ toArray });
+    const skip = jest.fn().mockReturnValue({ limit });
+    const sort = jest.fn().mockReturnValue({ skip });
+    mockCollection.find.mockReturnValue({ sort });
+    mockCollection.countDocuments.mockResolvedValue(total);
+    return { sort, skip, limit };
+  }
+
   it("validates complete contact input", () => {
     expect(isContactInput(input)).toBe(true);
     expect(isContactInput({ ...input, email: " " })).toBe(false);
     expect(isContactInput({ ...input, status: "Prospect" })).toBe(false);
   });
 
-  it("lists contacts newest first and serializes Mongo IDs", async () => {
-    const toArray = jest.fn().mockResolvedValue([document]);
-    mockCollection.find.mockReturnValue({ sort: jest.fn().mockReturnValue({ toArray }) });
+  it("lists one page of contacts newest first, with the total, and serializes Mongo IDs", async () => {
+    const { sort, skip, limit } = mockListChain([document], 41);
 
-    await expect(listContacts()).resolves.toEqual([{ ...input, id: contactId.toHexString(), color: "violet" }]);
-    expect(mockCollection.find).toHaveBeenCalledWith();
+    await expect(listContacts({ page: 1, limit: 20, q: "" })).resolves.toEqual({
+      items: [{ ...input, id: contactId.toHexString(), color: "violet" }],
+      total: 41,
+      page: 1,
+      limit: 20,
+    });
+    expect(mockCollection.find).toHaveBeenCalledWith({});
+    expect(sort).toHaveBeenCalledWith({ _id: -1 });
+    expect(skip).toHaveBeenCalledWith(0);
+    expect(limit).toHaveBeenCalledWith(20);
+  });
+
+  it("filters by status and text (escaping regex characters) and skips earlier pages", async () => {
+    const { skip, limit } = mockListChain([], 0);
+    const pattern = { $regex: "a\\.b", $options: "i" };
+    const filter = { status: "Lead", $or: [{ name: pattern }, { email: pattern }, { company: pattern }, { role: pattern }] };
+
+    await listContacts({ page: 3, limit: 10, q: "a.b", status: "Lead" });
+
+    expect(mockCollection.find).toHaveBeenCalledWith(filter);
+    expect(mockCollection.countDocuments).toHaveBeenCalledWith(filter);
+    expect(skip).toHaveBeenCalledWith(20);
+    expect(limit).toHaveBeenCalledWith(10);
   });
 
   it("returns no contact for an invalid or missing ID", async () => {
@@ -118,6 +149,14 @@ describe("contacts data helpers", () => {
     expect(isContactInput({ ...input, email: `${"x".repeat(250)}@example.com` })).toBe(false);
   });
 
+  it("parses list query parameters, with defaults and limits", () => {
+    expect(parseListQuery(new URLSearchParams())).toEqual({ page: 1, limit: 20, q: "" });
+    expect(parseListQuery(new URLSearchParams("page=3&limit=50&q=%20grace%20&status=Lead"))).toEqual({ page: 3, limit: 50, q: "grace", status: "Lead" });
+    expect(parseListQuery(new URLSearchParams("page=0&limit=1000"))).toEqual({ page: 1, limit: 100, q: "" });
+    expect(parseListQuery(new URLSearchParams("page=abc&limit=-5&status=Prospect"))).toEqual({ page: 1, limit: 20, q: "" });
+    expect(parseListQuery(new URLSearchParams({ q: "x".repeat(150) })).q).toHaveLength(100);
+  });
+
   it("does not create a contact when the email already exists, ignoring case", async () => {
     mockCollection.findOne.mockResolvedValue(document);
 
@@ -128,5 +167,12 @@ describe("contacts data helpers", () => {
       { collation: { locale: "en", strength: 2 } },
     );
     expect(mockCollection.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("summarises contact counts by status", async () => {
+    mockCollection.countDocuments.mockImplementation(async (filter: { status?: string }) =>
+      filter.status === "Active" ? 3 : filter.status === "Lead" ? 2 : 10);
+
+    await expect(getSummary()).resolves.toEqual({ total: 10, active: 3, leads: 2 });
   });
 });
