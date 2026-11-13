@@ -38,6 +38,14 @@ describe("/api/contacts/[id]", () => {
     await expect(response.json()).resolves.toEqual(contact);
   });
 
+  it("returns 409 when the email belongs to another contact", async () => {
+    mockIsContactInput.mockReturnValue(true);
+    mockUpdateContact.mockResolvedValue(null);
+    const response = await PUT(new Request("http://localhost", { method: "PUT", body: JSON.stringify(input) }), context("1"));
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({ error: expect.any(String) });
+  });
+
   it("deletes a contact or returns 404", async () => {
     mockRemoveContact.mockResolvedValue(true);
     expect((await DELETE(new Request("http://localhost"), context("1"))).status).toBe(204);

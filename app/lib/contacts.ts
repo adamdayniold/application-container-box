@@ -50,7 +50,10 @@ export async function updateContact(id: string, input: ContactInput) {
   const objectId = toObjectId(id);
   if (!objectId) return undefined;
   const contacts = await collection();
-  const result = await contacts.updateOne({ _id: objectId }, { $set: input });
+  const email = input.email.trim();
+  const duplicate = await contacts.findOne({ email, _id: { $ne: objectId } }, { collation: { locale: "en", strength: 2 } });
+  if (duplicate) return null;
+  const result = await contacts.updateOne({ _id: objectId }, { $set: { ...input, email } });
   if (!result.matchedCount) return undefined;
   return getContact(id);
 }

@@ -17,6 +17,9 @@ export const PUT = withMetrics("PUT", "/api/contacts/[id]", async (request: Requ
     return Response.json({ error: "Name, email, company, role, and a valid status are required." }, { status: 400 });
   }
   const contact = await updateContact(id, payload);
+  if (contact === null) {
+    return Response.json({ error: "A contact with this email already exists." }, { status: 409 });
+  }
   return contact ? Response.json(contact) : Response.json({ error: "Contact not found." }, { status: 404 });
 });
 

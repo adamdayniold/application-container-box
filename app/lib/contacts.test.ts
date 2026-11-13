@@ -90,12 +90,24 @@ describe("contacts data helpers", () => {
 
   it("updates and removes existing contacts", async () => {
     mockCollection.updateOne.mockResolvedValue({ matchedCount: 1 } as never);
-    mockCollection.findOne.mockResolvedValue(document);
+    mockCollection.findOne.mockImplementation(async (filter: { email?: string }) => ("email" in filter ? null : document));
     mockCollection.deleteOne.mockResolvedValue({ deletedCount: 1 } as never);
 
     await expect(updateContact(contactId.toHexString(), input)).resolves.toEqual({ ...input, id: contactId.toHexString(), color: "violet" });
     await expect(removeContact(contactId.toHexString())).resolves.toBe(true);
     await expect(removeContact("invalid")).resolves.toBe(false);
+  });
+
+  it("does not update a contact to an email another contact already uses", async () => {
+    mockCollection.findOne.mockResolvedValue({ ...document, _id: new ObjectId("507f1f77bcf86cd799439012") });
+
+    await expect(updateContact(contactId.toHexString(), { ...input, email: " BOB@example.com " })).resolves.toBeNull();
+
+    expect(mockCollection.findOne).toHaveBeenCalledWith(
+      { email: "BOB@example.com", _id: { $ne: contactId } },
+      { collation: { locale: "en", strength: 2 } },
+    );
+    expect(mockCollection.updateOne).not.toHaveBeenCalled();
   });
 
   it("rejects malformed emails and over-long fields", () => {
