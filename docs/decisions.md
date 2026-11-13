@@ -66,6 +66,14 @@ Short notes on why the pipeline and the image work the way they do, and what eac
 
 **Trade-off:** Two requests to different ids cannot be told apart in the metrics. That detail belongs in logs, not metrics.
 
+## The contacts page derives its loading and error states
+
+**Decision:** The page remembers which request its last list result belongs to (`loadResult = { key, error? }`, where the key is built from the reload counter, the page, the debounced search and the status filter) and derives everything else from it. Before the first result there is nothing to show, so the table says "Loading contacts…". A later request is one whose key differs from the last result's: the old rows stay, dimmed and marked `aria-busy`. A failed request shows an error row with a "Try again" button, not the "No contacts match" message, and the error only counts while it belongs to the current request, so it clears by itself on the next search, page change or retry. The stat cards show a dash until the summary has loaded, or when it fails, never a made-up 0. The red banner at the top is only for save and delete errors.
+
+**Why:** Before this, a failed list looked exactly like an empty search result, and the cards showed 0 whenever the summary was missing. A `loading` flag set at the start of an effect would mean setting state synchronously inside an effect (which React's lint rules warn about) and a second piece of state to reset the error. Comparing keys is derived state: there is nothing to reset, and a result from an old request can never be mistaken for the current one.
+
+**Trade-off:** The key is a string built by hand, so a new input to the list query has to be added to the key and to the effect's dependencies, or the busy state stops matching. If a reload fails after an earlier success, the cards keep their last numbers (only the first load shows dashes). Late answers from superseded requests are ignored, not aborted: the browser still finishes them. There is no automatic retry, only the button.
+
 ## Structured request logs, without bodies
 
 **Decision:** The app writes one JSON line per request (`time`, `level`, `msg`, `method`, `route`, `status`, `duration_ms`, and `error` when a handler throws) from the same wrapper that records the metrics. The level follows the status: 5xx is `error`, 4xx is `warn`, anything else is `info`. Request bodies, the health routes and `/api/metrics` are not logged. `LOG_LEVEL=silent` turns the logger off.
