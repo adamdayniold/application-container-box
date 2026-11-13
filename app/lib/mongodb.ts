@@ -1,4 +1,5 @@
 import { MongoClient } from "mongodb";
+import { log } from "./logger";
 
 const uri = process.env.MONGODB_URI;
 const databaseName = process.env.MONGODB_DB ?? "canvas";
@@ -12,11 +13,24 @@ export async function getDb() {
     throw new Error("Set MONGODB_URI before using the contacts API.");
   }
 
-  globalForMongo.mongoClientPromise ??= new MongoClient(uri).connect().catch((error) => {
+  globalForMongo.mongoClientPromise ??= connect(uri).catch((error) => {
     globalForMongo.mongoClientPromise = undefined;
     throw error;
   });
 
   const client = await globalForMongo.mongoClientPromise;
   return client.db(databaseName);
+}
+
+async function connect(connectionUri: string) {
+  const client = await new MongoClient(connectionUri).connect();
+  try {
+    await client
+      .db(databaseName)
+      .collection("contacts")
+      .createIndex({ email: 1 }, { unique: true, collation: { locale: "en", strength: 2 } });
+  } catch (error) {
+    log("warn", "could not create the unique email index", { error: error instanceof Error ? error.message : String(error) });
+  }
+  return client;
 }

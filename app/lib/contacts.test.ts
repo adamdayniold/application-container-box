@@ -169,6 +169,27 @@ describe("contacts data helpers", () => {
     expect(mockCollection.insertOne).not.toHaveBeenCalled();
   });
 
+  it("returns null when the unique index rejects a duplicate on create", async () => {
+    mockCollection.findOne.mockResolvedValue(null);
+    mockCollection.insertOne.mockRejectedValue({ code: 11000 });
+
+    await expect(createContact(input)).resolves.toBeNull();
+  });
+
+  it("returns null when the unique index rejects a duplicate on update", async () => {
+    mockCollection.findOne.mockResolvedValue(null);
+    mockCollection.updateOne.mockRejectedValue({ code: 11000 });
+
+    await expect(updateContact(contactId.toHexString(), input)).resolves.toBeNull();
+  });
+
+  it("does not hide other database errors on create", async () => {
+    mockCollection.findOne.mockResolvedValue(null);
+    mockCollection.insertOne.mockRejectedValue(new Error("disk full"));
+
+    await expect(createContact(input)).rejects.toThrow("disk full");
+  });
+
   it("summarises contact counts by status", async () => {
     mockCollection.countDocuments.mockImplementation(async (filter: { status?: string }) =>
       filter.status === "Active" ? 3 : filter.status === "Lead" ? 2 : 10);

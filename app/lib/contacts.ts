@@ -35,6 +35,10 @@ function escapeRegex(text: string) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function isDuplicateKeyError(error: unknown) {
+  return typeof error === "object" && error !== null && (error as { code?: unknown }).code === 11000;
+}
+
 export async function listContacts({ page, limit, q, status }: ListQuery) {
   const contacts = await collection();
   const filter: Filter<ContactDocument> = {};
@@ -73,7 +77,12 @@ export async function createContact(input: ContactInput) {
   const existing = await contacts.findOne({ email }, { collation: { locale: "en", strength: 2 } });
   if (existing) return null;
   const document: ContactDocument = { _id: new ObjectId(), ...input, email, color: colors[Math.floor(Math.random() * colors.length)] };
-  await contacts.insertOne(document);
+  try {
+    await contacts.insertOne(document);
+  } catch (error) {
+    if (isDuplicateKeyError(error)) return null;
+    throw error;
+  }
   return serializeContact(document);
 }
 
@@ -84,8 +93,13 @@ export async function updateContact(id: string, input: ContactInput) {
   const email = input.email.trim();
   const duplicate = await contacts.findOne({ email, _id: { $ne: objectId } }, { collation: { locale: "en", strength: 2 } });
   if (duplicate) return null;
-  const result = await contacts.updateOne({ _id: objectId }, { $set: { ...input, email } });
-  if (!result.matchedCount) return undefined;
+  try {
+    const result = await contacts.updateOne({ _id: objectId }, { $set: { ...input, email } });
+    if (!result.matchedCount) return undefined;
+  } catch (error) {
+    if (isDuplicateKeyError(error)) return null;
+    throw error;
+  }
   return getContact(id);
 }
 
