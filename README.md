@@ -118,9 +118,9 @@ The image is the same for every environment. Configuration comes only from these
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/contacts` | List contacts |
-| `POST` | `/api/contacts` | Create a contact |
+| `POST` | `/api/contacts` | Create a contact (`400` for invalid input, `409` if the email already exists) |
 | `GET` | `/api/contacts/[id]` | Read one contact |
-| `PUT` | `/api/contacts/[id]` | Update a contact |
+| `PUT` | `/api/contacts/[id]` | Update a contact (`400` invalid, `404` not found, `409` if another contact has that email) |
 | `DELETE` | `/api/contacts/[id]` | Delete a contact |
 | `GET` | `/api/health` | Liveness: returns `200 {"status":"ok"}`, no database access |
 | `GET` | `/api/health/ready` | Readiness: pings MongoDB; `200 {"status":"ready"}`, or `503 {"status":"unavailable"}` if it cannot |
@@ -163,6 +163,7 @@ Dependabot (`.github/dependabot.yaml`) checks npm, Docker and GitHub Actions wee
 - The Helm chart pins an immutable `sha-<commit>` tag, but the tag is bumped by hand after each `stage` build. Planned: Flux image automation (needs a sortable tag format from CI).
 - The cluster runs the `stage` build; the Helm chart does not reference `:production` yet, so promotion to `main` is a retag in the registry and does not itself change what the cluster runs.
 - No authentication.
+- Email uniqueness is checked in code, not by a database index, so two simultaneous requests with the same email could both succeed (see `docs/decisions.md`). Duplicates that already existed are not touched.
 - `/api/metrics` has no authentication and is reachable through the Gateway, because the HTTPRoute sends every path to the app. Fine for a local demo; in a real setup it would be restricted to the cluster network.
 - Logs are one line per request with no request id or user context. Errors carry only the message; the stack trace comes from Next.js's own unstructured output. The health and metrics routes are not logged on purpose.
 - Remaining `npm audit` findings are in dev-only tooling, not in the image.

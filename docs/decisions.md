@@ -73,3 +73,11 @@ Short notes on why the pipeline and the image work the way they do, and what eac
 **Why:** Alloy ships stdout to Loki, and `| json` turns each field into something to filter on. Bodies hold names and emails, and the kubelet probes would drown the useful lines (the same reasoning as for the metrics). `route` is the pattern, not the real URL.
 
 **Trade-off:** A hand-written logger of about 10 lines instead of a library such as pino: nothing to bundle or explain, but no log levels beyond `silent`, no redaction helpers and no request ids. Worth revisiting if the app grows.
+
+## Emails are unique, checked in code
+
+**Decision:** Creating or updating a contact fails with `409` when another contact already has the same email, ignoring case (`Ada@x.com` equals `ada@x.com`). The check is a `findOne` with a case-insensitive collation; on update the contact being edited is excluded, so saving it with its own email still works. Emails are stored trimmed, and the validator also requires an email shape and caps field lengths (100 characters, 254 for the email).
+
+**Why:** A contacts list with silent duplicates is the first thing a user would hit. A lookup in the data layer needs no database setup, and it is covered by unit tests plus a manual check against a real MongoDB.
+
+**Trade-off:** Check-then-write is not atomic, so two simultaneous requests with the same email can both pass. A unique index with the same collation would close that gap, but the app has no startup step that creates indexes, and adding one for a single constraint was not worth it yet. Duplicates that were already in the database are not touched.
