@@ -8,6 +8,8 @@ export type ContactInput = Omit<Contact, "id" | "color">;
 type ContactDocument = ContactInput & { _id: ObjectId; color: string };
 
 const colors = ["violet", "orange", "teal", "blue", "pink", "yellow"];
+const maxLength = { name: 100, email: 254, company: 100, role: 100 };
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function collection() {
   return getDb().then((db) => db.collection<ContactDocument>("contacts"));
@@ -36,7 +38,10 @@ export async function getContact(id: string) {
 
 export async function createContact(input: ContactInput) {
   const contacts = await collection();
-  const document: ContactDocument = { _id: new ObjectId(), ...input, color: colors[Math.floor(Math.random() * colors.length)] };
+  const email = input.email.trim();
+  const existing = await contacts.findOne({ email }, { collation: { locale: "en", strength: 2 } });
+  if (existing) return null;
+  const document: ContactDocument = { _id: new ObjectId(), ...input, email, color: colors[Math.floor(Math.random() * colors.length)] };
   await contacts.insertOne(document);
   return serializeContact(document);
 }
@@ -60,6 +65,11 @@ export async function removeContact(id: string) {
 export function isContactInput(value: unknown): value is ContactInput {
   if (!value || typeof value !== "object") return false;
   const input = value as Record<string, unknown>;
-  return ["name", "email", "company", "role"].every((field) => typeof input[field] === "string" && input[field].trim())
+  const textFieldsValid = (["name", "email", "company", "role"] as const).every((field) => {
+    const text = input[field];
+    return typeof text === "string" && text.trim() !== "" && text.length <= maxLength[field];
+  });
+  return textFieldsValid
+    && emailPattern.test((input.email as string).trim())
     && ["Active", "Lead", "Inactive"].includes(input.status as string);
 }

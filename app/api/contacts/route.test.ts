@@ -42,6 +42,14 @@ describe("/api/contacts", () => {
     await expect(response.json()).resolves.toEqual(contact);
   });
 
+  it("returns 409 when the email already exists", async () => {
+    mockIsContactInput.mockReturnValue(true);
+    mockCreateContact.mockResolvedValue(null);
+    const response = await POST(new Request("http://localhost/api/contacts", { method: "POST", body: JSON.stringify(input) }));
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({ error: expect.any(String) });
+  });
+
   it("records metrics for requests, under the route pattern", async () => {
     metrics.requests.reset();
     mockIsContactInput.mockReturnValue(false);
