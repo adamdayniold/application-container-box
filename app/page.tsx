@@ -14,13 +14,18 @@ export default function Home() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [editing, setEditing] = useState<Contact | null>(null);
   const [form, setForm] = useState<ContactForm>(emptyForm);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loadResult, setLoadResult] = useState<{ key: string; error?: string } | null>(null);
   const [error, setError] = useState("");
-  const [summary, setSummary] = useState({ total: 0, active: 0, leads: 0 });
+  const [summary, setSummary] = useState<{ total: number; active: number; leads: number } | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+
   const reload = () => setReloadKey((key) => key + 1);
+  const listKey = `${reloadKey}|${page}|${debouncedQuery}|${statusFilter}`;
+  const isLoading = loadResult === null;
+  const isRefreshing = loadResult !== null && loadResult.key !== listKey;
+  const listError = loadResult?.key === listKey ? loadResult.error : undefined;
 
   useEffect(() => {
     const timer = setTimeout(() => { setDebouncedQuery(query); setPage(1); }, 300);
@@ -32,11 +37,11 @@ export default function Home() {
     async function loadSummary() {
       try {
         const response = await fetch("/api/contacts/summary");
-        if (!response.ok) throw new Error("Unable to load contacts.");
+        if (!response.ok) throw new Error("Unable to load the summary.");
         const counts = await response.json();
         if (!cancelled) setSummary(counts);
-      } catch (loadError) {
-        if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Unable to load contacts.");
+      } catch {
+        // The stat cards show a dash while the summary is unavailable.
       }
     }
     void loadSummary();
@@ -60,13 +65,14 @@ export default function Home() {
         }
         setContacts(list.items);
         setTotal(list.total);
-      } catch (loadError) {
-        if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Unable to load contacts.");
-      } finally { if (!cancelled) setIsLoading(false); }
+        setLoadResult({ key: listKey });
+      } catch {
+        if (!cancelled) setLoadResult({ key: listKey, error: "Unable to load contacts." });
+      }
     }
     void loadList();
     return () => { cancelled = true; };
-  }, [reloadKey, debouncedQuery, statusFilter, page]);
+  }, [listKey, page, debouncedQuery, statusFilter]);
 
   const openCreate = () => { setEditing(null); setForm(emptyForm); };
   const openEdit = (contact: Contact) => { setEditing(contact); setForm({ name: contact.name, email: contact.email, company: contact.company, role: contact.role, status: contact.status }); };
@@ -108,7 +114,7 @@ export default function Home() {
           <span>⌂</span> Overview
         </a>
         <a className="nav-item active" href="#contacts">
-          <span>♙</span> Contacts <b>{summary.total}</b>
+          <span>♙</span> Contacts <b>{summary?.total ?? "–"}</b>
         </a>
         <a className="nav-item" href="#companies">
           <span>▣</span> Companies
@@ -142,17 +148,17 @@ export default function Home() {
       <section className="stat-grid" aria-label="Contact summary">
         <article>
           <p>Total contacts</p>
-          <strong>{summary.total}</strong>
+          <strong>{summary?.total ?? "–"}</strong>
           <span className="stat-note positive">↗ 12% <em>vs last month</em></span>
         </article>
         <article>
           <p>Active contacts</p>
-          <strong>{summary.active}</strong>
-          <span className="stat-note">{summary.total ? Math.round(summary.active / summary.total * 100) : 0}% of total</span>
+          <strong>{summary?.active ?? "–"}</strong>
+          <span className="stat-note">{summary ? `${summary.total ? Math.round(summary.active / summary.total * 100) : 0}% of total` : "–"}</span>
         </article>
         <article>
           <p>New leads</p>
-          <strong>{summary.leads}</strong>
+          <strong>{summary?.leads ?? "–"}</strong>
           <span className="stat-note">Ready to follow up</span>
         </article>
       </section>
@@ -166,8 +172,8 @@ export default function Home() {
             <span>Filter:</span>{["All", "Active", "Lead", "Inactive"].map((filter) => <button key={filter} onClick={() => { setStatusFilter(filter); setPage(1); }}>{filter}</button>)}
           </div>
         </div>
-        <div className="table-scroll">
-          <table>
+        <div className={isRefreshing ? "table-scroll refreshing" : "table-scroll"}>
+          <table aria-busy={isRefreshing}>
             <thead>
               <tr>
                 <th>Contact</th>
@@ -184,6 +190,7 @@ export default function Home() {
                   <div className="empty-state">Loading contacts…</div>
                 </td>
               </tr>
+               : listError ? <tr><td colSpan={5}><div className="empty-state" role="alert"><span>{listError}</span> <button className="secondary-button" onClick={reload}>Try again</button></div></td></tr>
                : contacts.map((contact) => <tr key={contact.id}>
                 <td>
                   <div className="contact-name">
@@ -201,7 +208,7 @@ export default function Home() {
                   </div>
                 </td>
               </tr>)}
-              {!isLoading && contacts.length === 0 && <tr>
+              {!isLoading && !listError && contacts.length === 0 && <tr>
                 <td colSpan={5}>
                   <div className="empty-state">No contacts match your search. Try another filter or add someone new.</div>
                 </td>

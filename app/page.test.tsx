@@ -17,10 +17,13 @@ const manyContacts: Row[] = Array.from({ length: 23 }, (_, index) => ({
   color: "teal",
 }));
 const mockFetch = jest.fn();
+const failing = { list: false, summary: false };
 
 beforeEach(() => {
   mockFetch.mockReset();
   global.fetch = mockFetch;
+  failing.list = false;
+  failing.summary = false;
 });
 
 const response = (body: unknown) => ({ ok: true, json: async () => body });
@@ -28,6 +31,8 @@ const response = (body: unknown) => ({ ok: true, json: async () => body });
 // A tiny in-memory fake of the API, so the page can reload after a change.
 function renderPage(summaryOverride?: { total: number; active: number; leads: number }, initialRows: Row[] = contacts) {
   let rows = [...initialRows];
+  const failed = { ok: false, json: async () => ({ error: "Server error" }) };
+
   mockFetch.mockImplementation(async (url: string, init?: { method?: string }) => {
     if (init?.method === "POST") {
       const created = { ...contacts[0], id: "3", name: "Alan Turing" };
@@ -39,12 +44,15 @@ function renderPage(summaryOverride?: { total: number; active: number; leads: nu
       return { ok: true };
     }
     if (url.startsWith("/api/contacts/summary")) {
+      if (failing.summary) return failed;
       return response(summaryOverride ?? {
         total: rows.length,
         active: rows.filter((row) => row.status === "Active").length,
         leads: rows.filter((row) => row.status === "Lead").length,
       });
     }
+
+    if (failing.list) return failed;
     const params = new URL(url, "http://localhost").searchParams;
     const text = (params.get("q") ?? "").toLowerCase();
     const status = params.get("status");
@@ -142,5 +150,36 @@ describe("Home", () => {
     jest.spyOn(window, "confirm").mockReturnValue(true);
     fireEvent.click(screen.getByRole("button", { name: "Delete Ada Lovelace" }));
     await waitFor(() => expect(screen.queryByText("Ada Lovelace")).not.toBeInTheDocument());
+  });
+
+  it("keeps the current rows, marked busy, while the next page loads", async () => {
+    const user = userEvent.setup();
+    renderPage(undefined, manyContacts);
+    await screen.findByText("Person 01");
+    await waitFor(() => expect(screen.getByRole("table")).toHaveAttribute("aria-busy", "false"));
+    mockFetch.mockImplementationOnce(() => new Promise(() => {}));
+    await user.click(screen.getByRole("button", { name: "Next page" }));
+    expect(screen.getByRole("table")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByText("Person 01")).toBeInTheDocument();
+  });
+
+  it("shows an error with a retry button when the list cannot be loaded", async () => {
+    const user = userEvent.setup();
+    failing.list = true;
+    renderPage();
+    await screen.findByText("Unable to load contacts.");
+    expect(screen.queryByText(/No contacts match/)).not.toBeInTheDocument();
+    failing.list = false;
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    await screen.findByText("Ada Lovelace");
+    expect(screen.queryByText("Unable to load contacts.")).not.toBeInTheDocument();
+  });
+
+  it("shows dashes instead of zeros when the summary cannot be loaded", async () => {
+    failing.summary = true;
+    renderPage();
+    await screen.findByText("Ada Lovelace");
+    expect(screen.getByText("Total contacts").parentElement).toHaveTextContent("–");
+    expect(screen.getByText("New leads").parentElement).toHaveTextContent("–");
   });
 });
