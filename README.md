@@ -117,7 +117,8 @@ The image is the same for every environment. Configuration comes only from these
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/contacts` | List contacts |
+| `GET` | `/api/contacts` | List one page of contacts, newest first: `{"items": [...], "total": n, "page": n, "limit": n}`. Query parameters (all optional): `page` (default 1), `limit` (default 20, at most 100), `q` (text search in name, email, company and role, case-insensitive), `status` (`Active`, `Lead` or `Inactive`). Invalid values fall back to the defaults. `total` counts the contacts that match `q` and `status`. |
+| `GET` | `/api/contacts/summary` | Counts for the whole workspace, ignoring any search or filter: `{"total": n, "active": n, "leads": n}` |
 | `POST` | `/api/contacts` | Create a contact (`400` for invalid input, `409` if the email already exists) |
 | `GET` | `/api/contacts/[id]` | Read one contact |
 | `PUT` | `/api/contacts/[id]` | Update a contact (`400` invalid, `404` not found, `409` if another contact has that email) |
@@ -163,6 +164,7 @@ Dependabot (`.github/dependabot.yaml`) checks npm, Docker and GitHub Actions wee
 - The Helm chart pins an immutable `sha-<commit>` tag, but the tag is bumped by hand after each `stage` build. Planned: Flux image automation (needs a sortable tag format from CI).
 - The cluster runs the `stage` build; the Helm chart does not reference `:production` yet, so promotion to `main` is a retag in the registry and does not itself change what the cluster runs.
 - No authentication.
+- The contact search is an unanchored, case-insensitive regex over four fields. MongoDB cannot use an index for it, so it scans the collection. Fine for a demo-sized list; a text index or a search service would be the next step (see `docs/decisions.md`).
 - Email uniqueness is checked in code, not by a database index, so two simultaneous requests with the same email could both succeed (see `docs/decisions.md`). Duplicates that already existed are not touched.
 - `/api/metrics` has no authentication and is reachable through the Gateway, because the HTTPRoute sends every path to the app. Fine for a local demo; in a real setup it would be restricted to the cluster network.
 - Logs are one line per request with no request id or user context. Errors carry only the message; the stack trace comes from Next.js's own unstructured output. The health and metrics routes are not logged on purpose.
