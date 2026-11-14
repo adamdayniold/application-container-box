@@ -1,7 +1,7 @@
 # ==========================================
 # 1. BASE STAGE (Shared OS setup)
 # ==========================================
-FROM node:24.22.2-alpine3.24 AS base
+FROM node:26.13.0-alpine3.24 AS base
 WORKDIR /app
 # Alpine uses musl; libc6-compat lets Next.js's native modules (sharp) run
 RUN apk add --no-cache libc6-compat
@@ -30,7 +30,7 @@ RUN npm run build
 # ==========================================
 # 4. PRODUCTION / STAGING RUNTIME STAGE
 # ==========================================
-FROM node:24.22.2-alpine3.24 AS prod
+FROM node:26.13.0-alpine3.24 AS prod
 WORKDIR /app
 
 ENV NODE_ENV=production
