@@ -165,7 +165,7 @@ Dependabot (`.github/dependabot.yaml`) checks npm, Docker and GitHub Actions wee
 - The cluster runs the `stage` build; the Helm chart does not reference `:production` yet, so promotion to `main` is a retag in the registry and does not itself change what the cluster runs.
 - No authentication.
 - The contact search is an unanchored, case-insensitive regex over four fields. MongoDB cannot use an index for it, so it scans the collection. Fine for a demo-sized list; a text index or a search service would be the next step (see `docs/decisions.md`).
-- Email uniqueness is checked in code, not by a database index, so two simultaneous requests with the same email could both succeed (see `docs/decisions.md`). Duplicates that already existed are not touched.
+- Email uniqueness is enforced by a unique index (case-insensitive), created when the app first connects. If the database already contains duplicate emails the index cannot be built: the app logs a warning and runs with the lookup check only, which is not atomic, until the duplicates are removed and the app restarts (see `docs/decisions.md`). Duplicates that already existed are never deleted automatically.
 - `/api/metrics` has no authentication and is reachable through the Gateway, because the HTTPRoute sends every path to the app. Fine for a local demo; in a real setup it would be restricted to the cluster network.
 - Logs are one line per request with no request id or user context. Errors carry only the message; the stack trace comes from Next.js's own unstructured output. The health and metrics routes are not logged on purpose.
 - Remaining `npm audit` findings are in dev-only tooling, not in the image.

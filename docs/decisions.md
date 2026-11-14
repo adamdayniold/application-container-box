@@ -82,13 +82,17 @@ Short notes on why the pipeline and the image work the way they do, and what eac
 
 **Trade-off:** A hand-written logger of about 10 lines instead of a library such as pino: nothing to bundle or explain, but no log levels beyond `silent`, no redaction helpers and no request ids. Worth revisiting if the app grows.
 
-## Emails are unique, checked in code
+## Emails are unique, enforced by an index and checked in code
 
-**Decision:** Creating or updating a contact fails with `409` when another contact already has the same email, ignoring case (`Ada@x.com` equals `ada@x.com`). The check is a `findOne` with a case-insensitive collation; on update the contact being edited is excluded, so saving it with its own email still works. Emails are stored trimmed, and the validator also requires an email shape and caps field lengths (100 characters, 254 for the email).
+**Decision:** Creating or updating a contact fails with `409` when another contact already has the same email, ignoring case (`Ada@x.com` equals `ada@x.com`). Two things enforce it. The data layer first looks for an existing email with a case-insensitive collation (the fast path, and the way a clear error is produced). Behind it, a unique index on `email` with the same collation makes MongoDB itself refuse a second copy; a duplicate-key error (code `11000`) from the insert or the update is turned into the same `409`. On update the contact being edited is excluded from the lookup, so saving it with its own email still works. Emails are stored trimmed, and the validator also requires an email shape and caps field lengths (100 characters, 254 for the email).
 
-**Why:** A contacts list with silent duplicates is the first thing a user would hit. A lookup in the data layer needs no database setup, and it is covered by unit tests plus a manual check against a real MongoDB.
+**Where the index is created:** The app has no startup step, so `getDb()` creates it right after the first successful connect, inside the cached connection promise. That runs once per process, and `createIndex` does nothing if the index already exists. A failed connect still clears the cache and is retried.
 
-**Trade-off:** Check-then-write is not atomic, so two simultaneous requests with the same email can both pass. A unique index with the same collation would close that gap, but the app has no startup step that creates indexes, and adding one for a single constraint was not worth it yet. Duplicates that were already in the database are not touched.
+**Why:** A contacts list with silent duplicates is the first thing a user would hit. The lookup alone is not atomic: two simultaneous requests with the same new email can both pass it. Only the database can close that gap. The error is recognised by its `code`, not with `instanceof`, because the contacts tests mock the whole `mongodb` module.
+
+**Trade-off:** If the database already holds duplicate emails, MongoDB cannot build the index. The app then logs a warning (`could not create the unique email index`) and keeps running with the lookup alone, so the race protection is missing until the duplicates are removed and the app restarts; the index is not retried while the process lives. Failing to start was the alternative; it was rejected because a data problem should not take the whole app down. Duplicates that were already there are never deleted automatically.
+
+**Checked against a real MongoDB** (`docker compose` and `curl`): the index appears as `email_1` with `unique: true` and the collation; a duplicate in a different case gives `409` on `POST` and `PUT`; ten parallel `POST`s with one new email give one `201`, nine `409`s and one stored document; with duplicates in the database the app logs the warning and still answers `200`; after removing them and restarting, the index is built.
 
 ## The contact list is paged, searched and filtered on the server
 
