@@ -4,7 +4,7 @@ A Next.js + MongoDB contacts CRUD app, packaged as a container image (`linux/amd
 
 > **Status:** work in progress. The pipeline (test, build once, promote, tested hotfix path) has run end to end, and the image runs in a k3d cluster pinned by its `sha-<commit>` tag. See [CI/CD](#cicd) and [docs/decisions.md](docs/decisions.md). Still to do: image scanning, badges, more tests, and branch protection on `main` (not enforced while the repository is private).
 
-![Contacts page of the app, showing four sample contacts in a table with search, status filters and an "Add a contact" form](docs/ui-screenshot.png)
+![Contacts page of the app, showing three summary cards (total, active and new leads), a table of sample contacts with search, status filters and Edit and Delete links, and an "Add a contact" form on the right](docs/ui-screenshot.png)
 
 ## What this shows
 
