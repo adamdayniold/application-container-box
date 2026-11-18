@@ -1,8 +1,11 @@
 # application-container-box
 
+[![CI/CD](https://github.com/adamdayniold/application-container-box/actions/workflows/ci-cd.yaml/badge.svg)](https://github.com/adamdayniold/application-container-box/actions/workflows/ci-cd.yaml)
+[![Docker Hub](https://img.shields.io/badge/Docker%20Hub-adamdayniold%2Fcrud--mongodb-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/adamdayniold/crud-mongodb)
+
 A Next.js + MongoDB contacts CRUD app, packaged as a container image (`linux/amd64` by default, `linux/arm64` on demand) and shipped through a GitHub Actions pipeline that tests once, builds once and promotes the same image to production. It runs in the cluster defined by [mywebapp-k8s-helm](https://github.com/adamdayniold/mywebapp-k8s-helm).
 
-> **Status:** work in progress. The pipeline (test, build once, promote, tested hotfix path) has run end to end, and the image runs in a k3d cluster pinned by its `sha-<commit>` tag. See [CI/CD](#cicd) and [docs/decisions.md](docs/decisions.md). Still to do: image scanning, badges, more tests, and branch protection on `main` (not enforced while the repository is private).
+> **Status:** work in progress. The pipeline (test, build once, promote, tested hotfix path) has run end to end, and the image runs in a k3d cluster pinned by its `sha-<commit>` tag. See [CI/CD](#cicd) and [docs/decisions.md](docs/decisions.md). Still to do: image scanning and more tests.
 
 ![Contacts page of the app, showing three summary cards (total, active and new leads), a table of sample contacts with search, status filters and Edit and Delete links, and an "Add a contact" form on the right](docs/ui-screenshot.png)
 
@@ -60,9 +63,12 @@ Do **not** use the GitHub merge button for `stage` to `main`. It creates a new c
 
 ### Hotfix
 
-1. Commit the fix to `main` (no image exists for it, so the `hotfix` job runs).
-2. The job runs lint, typecheck, Jest and `npm audit`. Only if all pass does it build and push the image. If anything fails, nothing is pushed and `:production` does not move.
-3. Back-merge the fix into `stage` and `development`. Otherwise `main` gets ahead and the next fast-forward is impossible.
+`main` is protected by the `protect-main` ruleset, which requires the `test` check on the commit, so an untested commit cannot be pushed straight to `main`. A hotfix therefore goes through a branch and a pull request:
+
+1. Branch from `main` as `hotfix/<short-name>`, commit the fix and open a pull request to `main`. The `test` job runs on the pull request.
+2. When it is green, merge with **squash** or **rebase**, not a merge commit (the ruleset requires linear history). Either creates a new commit, so no image exists for it and the `hotfix` job runs.
+3. The `hotfix` job runs lint, typecheck, Jest and `npm audit` again. Only if all pass does it build and push the image. If anything fails, nothing is pushed and `:production` does not move.
+4. Back-merge the fix into `stage` and `development`. Otherwise `main` gets ahead and the next fast-forward is impossible.
 
 Trade-off: a hotfix skips verification on the `stage` cluster. It passes the automated tests, but it has not run in the cluster first.
 
@@ -160,7 +166,7 @@ Dependabot (`.github/dependabot.yaml`) checks npm, Docker and GitHub Actions wee
 
 - The hotfix path has run once, on an empty commit. It is verified, but the fix procedure (back-merge to `stage` and `development`) is manual.
 - Production images are `linux/amd64` only unless the arm64 build is run on demand.
-- Branch protection on `main` (the `protect-main` ruleset: status check `test`, linear history, no force pushes or deletions) is configured but not enforced while the repository is private, so a direct push to `main` is possible (it would take the hotfix path).
+- Branch protection on `main` is the `protect-main` ruleset (status check `test`, linear history, no force pushes or deletions, no bypass). It requires no pull request, so the fast-forward release push still works. It has been enforced since the repository became public; the hotfix pull request flow above has not been run against it yet.
 - The Helm chart pins an immutable `sha-<commit>` tag, but the tag is bumped by hand after each `stage` build. Planned: Flux image automation (needs a sortable tag format from CI).
 - The cluster runs the `stage` build; the Helm chart does not reference `:production` yet, so promotion to `main` is a retag in the registry and does not itself change what the cluster runs.
 - No authentication.
@@ -169,7 +175,7 @@ Dependabot (`.github/dependabot.yaml`) checks npm, Docker and GitHub Actions wee
 - `/api/metrics` has no authentication and is reachable through the Gateway, because the HTTPRoute sends every path to the app. Fine for a local demo; in a real setup it would be restricted to the cluster network.
 - Logs are one line per request with no request id or user context. Errors carry only the message; the stack trace comes from Next.js's own unstructured output. The health and metrics routes are not logged on purpose.
 - Remaining `npm audit` findings are in dev-only tooling, not in the image.
-- Planned: image scanning and badges.
+- Planned: image scanning.
 
 ## Related repositories
 
