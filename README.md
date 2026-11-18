@@ -69,7 +69,7 @@ Do **not** use the GitHub merge button for `stage` to `main`. It creates a new c
 1. Branch from `main` as `hotfix/<short-name>`, commit the fix and open a pull request to `main`. The `test` job runs on the pull request.
 2. When it is green, merge with **squash** or **rebase**, not a merge commit (the ruleset requires linear history). Either creates a new commit, so no image exists for it and the `hotfix` job runs.
 3. The `hotfix` job runs lint, typecheck, Jest and `npm audit` again. Only if all pass does it build and push the image. If anything fails, nothing is pushed and `:production` does not move.
-4. Back-merge the fix into `stage` and `development`. Otherwise `main` gets ahead and the next fast-forward is impossible.
+4. Back-merge the fix into `stage` and `development`. Otherwise `main` gets ahead and the next fast-forward is impossible. Do it in this order: merge `origin/main` into `development`, push `development`, then push `development` to `stage`. Do not push the hotfix commit to `stage` on its own: `build-stage` would rebuild that same commit and overwrite `:sha-<commit>`, so it would no longer match the image `:production` holds.
 
 Trade-off: a hotfix skips verification on the `stage` cluster. It passes the automated tests, but it has not run in the cluster first.
 
@@ -165,9 +165,9 @@ Dependabot (`.github/dependabot.yaml`) checks npm, Docker and GitHub Actions wee
 
 ## Known limitations and next steps
 
-- The hotfix path has run once, on an empty commit. It is verified, but the fix procedure (back-merge to `stage` and `development`) is manual.
+- The hotfix path has run twice: once on an empty commit pushed straight to `main` (before the ruleset was enforced), and once through the pull request flow above (a Dockerfile comment, squash merge, `hotfix` job built and pushed). The back-merge to `stage` and `development` is manual. A hotfix image is not scanned by Trivy, and it is a bare manifest, not the index that `promote` creates.
 - Production images are `linux/amd64` only unless the arm64 build is run on demand.
-- Branch protection on `main` is the `protect-main` ruleset (status check `test`, linear history, no force pushes or deletions, no bypass). It requires no pull request, so the fast-forward release push still works. It has been enforced since the repository became public; the hotfix pull request flow above has not been run against it yet.
+- Branch protection on `main` is the `protect-main` ruleset (status check `test`, linear history, no force pushes or deletions, no bypass). It requires no pull request, so the fast-forward release push still works. It has been enforced since the repository became public, and both the fast-forward release push and the hotfix pull request flow have been run against it.
 - The Helm chart pins an immutable `sha-<commit>` tag, but the tag is bumped by hand after each `stage` build. Planned: Flux image automation (needs a sortable tag format from CI).
 - The cluster runs the `stage` build; the Helm chart does not reference `:production` yet, so promotion to `main` is a retag in the registry and does not itself change what the cluster runs.
 - No authentication.

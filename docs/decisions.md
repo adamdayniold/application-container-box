@@ -26,6 +26,8 @@ Short notes on why the pipeline and the image work the way they do, and what eac
 
 **Trade-off:** Pushing the same commit to `stage` and `main` at the same time is a race, because `detect` may run before `build-stage` finishes. It happened on 2026-11-08, and `main` took the hotfix path. Push to `stage` first and wait for the build.
 
+**Checked on 2026-11-18, through a pull request:** a one-line Dockerfile comment on a `hotfix/*` branch, a PR to `main` (the `test` job ran on the PR), and a squash merge (a merge commit is refused by the linear-history rule). The new commit had no image, so `detect` chose `hotfix`, which ran lint, typecheck, Jest and `npm audit`, then built and pushed `:sha-<commit>` and `:production` from one build: both resolve to the same bare manifest (`fe8a888f...`). **Back-merge order matters:** pushing the hotfix commit straight to `stage` would make `build-stage` rebuild that commit and overwrite `:sha-<commit>` with a different digest than `:production` holds, because image builds are not byte-reproducible. Merging `main` into `development` first gives a new merge commit, so `stage` builds a new SHA and nothing is overwritten; `main` stays an ancestor of `stage`, so the next fast-forward still works. If `development` ever had nothing of its own, that merge would fast-forward and the problem would return; a `build-stage` that skips when `:sha-<commit>` already exists would close it, and is not built. The `hotfix` job does not run the Trivy scan, so an emergency image ships unscanned.
+
 ## amd64 by default, arm64 on demand
 
 **Decision:** CI builds `linux/amd64`. `linux/arm64` is built only when ticked on a manual run of the workflow. The hotfix path is always amd64.
