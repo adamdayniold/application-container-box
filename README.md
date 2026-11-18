@@ -5,7 +5,7 @@
 
 A Next.js + MongoDB contacts CRUD app, packaged as a container image (`linux/amd64` by default, `linux/arm64` on demand) and shipped through a GitHub Actions pipeline that tests once, builds once and promotes the same image to production. It runs in the cluster defined by [mywebapp-k8s-helm](https://github.com/adamdayniold/mywebapp-k8s-helm).
 
-> **Status:** work in progress. The pipeline (test, build once, promote, tested hotfix path) has run end to end, and the image runs in a k3d cluster pinned by its `sha-<commit>` tag. See [CI/CD](#cicd) and [docs/decisions.md](docs/decisions.md). Still to do: image scanning and more tests.
+> **Status:** work in progress. The pipeline (test, build once, promote, tested hotfix path) has run end to end, and the image runs in a k3d cluster pinned by its `sha-<commit>` tag. See [CI/CD](#cicd) and [docs/decisions.md](docs/decisions.md). Still to do: more tests.
 
 ![Contacts page of the app, showing three summary cards (total, active and new leads), a table of sample contacts with search, status filters and Edit and Delete links, and an "Add a contact" form on the right](docs/ui-screenshot.png)
 
@@ -19,6 +19,7 @@ A Next.js + MongoDB contacts CRUD app, packaged as a container image (`linux/amd
 - **Prometheus metrics:** `/api/metrics` exposes process metrics plus a request counter and a latency histogram for the contacts API, labelled by method, route pattern and status. The Helm repo scrapes it with a ServiceMonitor and shows it on a provisioned Grafana dashboard.
 - **Structured JSON logs:** one JSON line per request (method, route pattern, status, duration, and the error message when a handler throws), written to stdout. Alloy ships it to Loki, where `| json` turns each field into something to filter on. Request bodies are never logged.
 - **Immutable image tags in the cluster:** the Helm chart pins `sha-<commit>`, so the running image is provable and reproducible, and the node cannot keep a stale cached `:stage`.
+- **Image scanning before the push:** `build-stage` builds the image, scans it with Trivy and only then pushes it, so an image with a fixable CRITICAL or HIGH vulnerability never gets a `:sha-<commit>` tag and cannot be promoted. The production image also has npm, Yarn and corepack removed, since the app only runs `node server.js` and their bundled packages were the only findings.
 - **Jest tests and lint** gate the pipeline.
 - **One Node version (24 LTS)** from `.nvmrc`, used by local development, CI and the image.
 
@@ -149,7 +150,7 @@ The workflow is `.github/workflows/ci-cd.yaml`. It reads two repository secrets,
 | --- | --- | --- |
 | `test` | Pull requests, `development`, `stage` | `npm ci`, lint, `next typegen` + `tsc --noEmit`, Jest, `npm audit --omit=dev --audit-level=high` |
 | `build-dev` | `development` | Builds the `dev` target, pushes nothing |
-| `build-stage` | `stage` (push or manual run) | Builds `linux/amd64`, plus `linux/arm64` if the `arm64` option is ticked on a manual run; pushes `:sha-<commit>` and `:stage` with revision and source labels |
+| `build-stage` | `stage` (push or manual run) | Builds `linux/amd64` and scans it with Trivy (fails on fixable CRITICAL or HIGH findings); then builds `linux/amd64`, plus `linux/arm64` if the `arm64` option is ticked on a manual run, and pushes `:sha-<commit>` and `:stage` with revision and source labels |
 | `detect` | `main` | Checks whether `:sha-<commit>` exists in Docker Hub |
 | `promote` | `main`, image found | Retags the image as `:production` |
 | `hotfix` | `main`, image missing | Runs the checks, then builds `linux/amd64` only and pushes `:sha-<commit>` and `:production` |
@@ -175,7 +176,7 @@ Dependabot (`.github/dependabot.yaml`) checks npm, Docker and GitHub Actions wee
 - `/api/metrics` has no authentication and is reachable through the Gateway, because the HTTPRoute sends every path to the app. Fine for a local demo; in a real setup it would be restricted to the cluster network.
 - Logs are one line per request with no request id or user context. Errors carry only the message; the stack trace comes from Next.js's own unstructured output. The health and metrics routes are not logged on purpose.
 - Remaining `npm audit` findings are in dev-only tooling, not in the image.
-- Planned: image scanning.
+- The Trivy scan runs on `stage` builds only. The `hotfix` path builds and pushes without scanning, and `promote` copies an image that was scanned when `stage` built it. Findings without a published fix are ignored on purpose (see `docs/decisions.md`).
 
 ## Related repositories
 
