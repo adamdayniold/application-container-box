@@ -69,6 +69,17 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - id: exists
+        name: Check whether the image already exists
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] && docker buildx imagetools inspect "$IMAGE:sha-$GITHUB_SHA" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Move the stage tag to the existing image
+        if: steps.exists.outputs.exists == 'true'
+        run: docker buildx imagetools create -t "$IMAGE:stage" "$IMAGE:sha-$GITHUB_SHA"
       - id: meta
         uses: docker/metadata-action@v6
         with:
@@ -89,6 +100,7 @@ jobs:
           sbom: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+        if: steps.exists.outputs.exists != 'true'
       - name: Scan image with Trivy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -96,7 +108,9 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
+        if: steps.exists.outputs.exists != 'true'
       - name: Build and Push Staging Image
+        if: steps.exists.outputs.exists != 'true'
         uses: docker/build-push-action@v7
         with:
           context: .
