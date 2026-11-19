@@ -69,7 +69,7 @@ Do **not** use the GitHub merge button for `stage` to `main`. It creates a new c
 1. Branch from `main` as `hotfix/<short-name>`, commit the fix and open a pull request to `main`. The `test` job runs on the pull request.
 2. When it is green, merge with **squash** or **rebase**, not a merge commit (the ruleset requires linear history). Either creates a new commit, so no image exists for it and the `hotfix` job runs.
 3. The `hotfix` job runs lint, typecheck, Jest and `npm audit` again. Only if all pass does it build and push the image. If anything fails, nothing is pushed and `:production` does not move.
-4. Back-merge the fix into `stage` and `development`. Otherwise `main` gets ahead and the next fast-forward is impossible. Do it in this order: merge `origin/main` into `development`, push `development`, then push `development` to `stage`. Do not push the hotfix commit to `stage` on its own: `build-stage` would rebuild that same commit and overwrite `:sha-<commit>`, so it would no longer match the image `:production` holds.
+4. Back-merge the fix into `stage` and `development`. Otherwise `main` gets ahead and the next fast-forward is impossible. Do it in this order: merge `origin/main` into `development`, push `development`, then push `development` to `stage`. This order gives `stage` a new commit, so it builds and scans a new image. If the hotfix commit did reach `stage` unchanged, `build-stage` would find `:sha-<commit>` already in Docker Hub, skip the scan and the build, and only move `:stage` to that image, so the image `:production` holds is never overwritten.
 
 Trade-off: a hotfix skips verification on the `stage` cluster. It passes the automated tests, but it has not run in the cluster first.
 
@@ -150,7 +150,7 @@ The workflow is `.github/workflows/ci-cd.yaml`. It reads two repository secrets,
 | --- | --- | --- |
 | `test` | Pull requests, `development`, `stage` | `npm ci`, lint, `next typegen` + `tsc --noEmit`, Jest, `npm audit --omit=dev --audit-level=high` |
 | `build-dev` | `development` | Builds the `dev` target, pushes nothing |
-| `build-stage` | `stage` (push or manual run) | Builds `linux/amd64` and scans it with Trivy (fails on fixable CRITICAL or HIGH findings); then builds `linux/amd64`, plus `linux/arm64` if the `arm64` option is ticked on a manual run, and pushes `:sha-<commit>` and `:stage` with revision and source labels |
+| `build-stage` | `stage` (push or manual run) | On a push, first checks whether `:sha-<commit>` already exists in Docker Hub. If it does, it only moves `:stage` to that image. If it does not (and always on a manual run), it builds `linux/amd64` and scans it with Trivy (fails on fixable CRITICAL or HIGH findings); then builds `linux/amd64`, plus `linux/arm64` if the `arm64` option is ticked on a manual run, and pushes `:sha-<commit>` and `:stage` with revision and source labels |
 | `detect` | `main` | Checks whether `:sha-<commit>` exists in Docker Hub |
 | `promote` | `main`, image found | Retags the image as `:production` |
 | `hotfix` | `main`, image missing | Runs the checks, then builds `linux/amd64` only and pushes `:sha-<commit>` and `:production` |
