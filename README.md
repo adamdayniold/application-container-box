@@ -68,8 +68,8 @@ Do **not** use the GitHub merge button for `stage` to `main`. It creates a new c
 
 1. Branch from `main` as `hotfix/<short-name>`, commit the fix and open a pull request to `main`. The `test` job runs on the pull request.
 2. When it is green, merge with **squash** or **rebase**, not a merge commit (the ruleset requires linear history). Either creates a new commit, so no image exists for it and the `hotfix` job runs.
-3. The `hotfix` job runs lint, typecheck, Jest and `npm audit` again. Only if all pass does it build and push the image. If anything fails, nothing is pushed and `:production` does not move.
-4. Back-merge the fix into `stage` and `development`. Otherwise `main` gets ahead and the next fast-forward is impossible. Do it in this order: merge `origin/main` into `development`, push `development`, then push `development` to `stage`. This order gives `stage` a new commit, so it builds and scans a new image. If the hotfix commit did reach `stage` unchanged, `build-stage` would find `:sha-<commit>` already in Docker Hub, skip the scan and the build, and only move `:stage` to that image, so the image `:production` holds is never overwritten.
+3. The `hotfix` job runs lint, typecheck, Jest and `npm audit` again, then builds the image and scans it with Trivy. Only if all pass does it push the image. If anything fails, nothing is pushed and `:production` does not move.
+4. Back-merge the fix into `stage` and `development` by **rebasing**, not merging. Otherwise `main` gets ahead and the next fast-forward is impossible. Run `git fetch`, `git switch development`, `git rebase origin/main`, then `git push --force-with-lease origin development` and `git push --force-with-lease origin development:stage`. Do not run `git merge origin/main`: it creates a merge commit, and the linear-history rule on `main` refuses a push that contains one (this happened on 2026-11-19, see `docs/decisions.md`). The rebase puts the hotfix commit under `development`'s own commits, so `main` stays an ancestor of `stage` and the next fast-forward is accepted. If `development` has nothing of its own, the rebase only moves it to the hotfix commit; `build-stage` then finds `:sha-<commit>` already in Docker Hub, skips the scan and the build, and only moves `:stage` to that image, so the image `:production` holds is never overwritten. If `development` has unreleased commits, their SHAs change and `stage` rebuilds them, so do not back-merge while something on `stage` is being verified.
 
 Trade-off: a hotfix skips verification on the `stage` cluster. It passes the automated tests, but it has not run in the cluster first.
 
@@ -153,7 +153,7 @@ The workflow is `.github/workflows/ci-cd.yaml`. It reads two repository secrets,
 | `build-stage` | `stage` (push or manual run) | On a push, first checks whether `:sha-<commit>` already exists in Docker Hub. If it does, it only moves `:stage` to that image. If it does not (and always on a manual run), it builds `linux/amd64` and scans it with Trivy (fails on fixable CRITICAL or HIGH findings); then builds `linux/amd64`, plus `linux/arm64` if the `arm64` option is ticked on a manual run, and pushes `:sha-<commit>` and `:stage` with revision and source labels |
 | `detect` | `main` | Checks whether `:sha-<commit>` exists in Docker Hub |
 | `promote` | `main`, image found | Retags the image as `:production` |
-| `hotfix` | `main`, image missing | Runs the checks, then builds `linux/amd64` only and pushes `:sha-<commit>` and `:production` |
+| `hotfix` | `main`, image missing | Runs the checks, builds `linux/amd64` and scans it with Trivy, then builds `linux/amd64` again and pushes `:sha-<commit>` and `:production` |
 
 `next typegen` runs before the typecheck because Next.js generates the `RouteContext` and `LayoutProps` types into `.next/`, which is not in the repository.
 
@@ -165,7 +165,7 @@ Dependabot (`.github/dependabot.yaml`) checks npm, Docker and GitHub Actions wee
 
 ## Known limitations and next steps
 
-- The hotfix path has run twice: once on an empty commit pushed straight to `main` (before the ruleset was enforced), and once through the pull request flow above (a Dockerfile comment, squash merge, `hotfix` job built and pushed). The back-merge to `stage` and `development` is manual. A hotfix image is not scanned by Trivy, and it is a bare manifest, not the index that `promote` creates.
+- The hotfix path has run twice: once on an empty commit pushed straight to `main` (before the ruleset was enforced), and once through the pull request flow above (a Dockerfile comment, squash merge, `hotfix` job built and pushed). The back-merge to `stage` and `development` is manual, and it must be a rebase (see step 4 above); the first back-merge was a merge commit and blocked the next release. The `hotfix` job has had the Trivy scan since 2026-11-19, but no real hotfix has run through it yet. A hotfix image is a bare manifest, not the index that `promote` creates.
 - Production images are `linux/amd64` only unless the arm64 build is run on demand.
 - Branch protection on `main` is the `protect-main` ruleset (status check `test`, linear history, no force pushes or deletions, no bypass). It requires no pull request, so the fast-forward release push still works. It has been enforced since the repository became public, and both the fast-forward release push and the hotfix pull request flow have been run against it.
 - The Helm chart pins an immutable `sha-<commit>` tag, but the tag is bumped by hand after each `stage` build. Planned: Flux image automation (needs a sortable tag format from CI).
