@@ -165,7 +165,7 @@ Dependabot (`.github/dependabot.yaml`) checks npm, Docker and GitHub Actions wee
 
 ## Known limitations and next steps
 
-- The hotfix path has run twice: once on an empty commit pushed straight to `main` (before the ruleset was enforced), and once through the pull request flow above (a Dockerfile comment, squash merge, `hotfix` job built and pushed). The back-merge to `stage` and `development` is manual, and it must be a rebase (see step 4 above); the first back-merge was a merge commit and blocked the next release. The `hotfix` job has had the Trivy scan since 2026-11-19, but no real hotfix has run through it yet. A hotfix image is a bare manifest, not the index that `promote` creates.
+- The hotfix path has run twice: once on an empty commit pushed straight to `main` (before the ruleset was enforced), and once through the pull request flow above (a Dockerfile comment, squash merge, `hotfix` job built and pushed). The back-merge to `stage` and `development` is manual, and it must be a rebase (see step 4 above); the first back-merge was a merge commit and blocked the next release. The `hotfix` job has had the Trivy scan since 2026-11-19, and the full procedure (pull request, squash merge, scan, push, rebase back-merge, `stage` build) ran once end to end on 2026-11-20. A hotfix image is a bare manifest, not the index that `promote` creates.
 - Production images are `linux/amd64` only unless the arm64 build is run on demand.
 - Branch protection on `main` is the `protect-main` ruleset (status check `test`, linear history, no force pushes or deletions, no bypass). It requires no pull request, so the fast-forward release push still works. It has been enforced since the repository became public, and both the fast-forward release push and the hotfix pull request flow have been run against it.
 - The Helm chart pins an immutable `sha-<commit>` tag, but the tag is bumped by hand after each `stage` build. Planned: Flux image automation (needs a sortable tag format from CI).
@@ -176,7 +176,7 @@ Dependabot (`.github/dependabot.yaml`) checks npm, Docker and GitHub Actions wee
 - `/api/metrics` has no authentication and is reachable through the Gateway, because the HTTPRoute sends every path to the app. Fine for a local demo; in a real setup it would be restricted to the cluster network.
 - Logs are one line per request with no request id or user context. Errors carry only the message; the stack trace comes from Next.js's own unstructured output. The health and metrics routes are not logged on purpose.
 - Remaining `npm audit` findings are in dev-only tooling, not in the image.
-- The Trivy scan runs on `stage` builds only. The `hotfix` path builds and pushes without scanning, and `promote` copies an image that was scanned when `stage` built it. Findings without a published fix are ignored on purpose (see `docs/decisions.md`).
+- The Trivy scan runs on `stage` builds and on the `hotfix` path, before anything is pushed. `promote` does not scan: it copies an image that was scanned when `stage` built it. Findings without a published fix are ignored on purpose (see `docs/decisions.md`).
 
 ## Related repositories
 
