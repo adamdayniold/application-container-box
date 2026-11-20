@@ -13,7 +13,7 @@ COPY package*.json ./
 FROM base AS dev
 RUN npm install
 COPY . .
-# Next.js telemetry can be disabled during development if desired
+# Telemetry can be switched off while developing (optional)
 ENV NEXT_TELEMETRY_DISABLED=1
 CMD ["npm", "run", "dev"]
 
