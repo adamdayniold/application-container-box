@@ -19,6 +19,8 @@ describe("MongoDB connection", () => {
     jest.resetModules();
     jest.clearAllMocks();
     delete (globalThis as typeof globalThis & { mongoClientPromise?: unknown }).mongoClientPromise;
+    delete process.env.MONGODB_USERNAME;
+    delete process.env.MONGODB_PASSWORD;
   });
 
   afterAll(() => {
@@ -107,5 +109,20 @@ describe("MongoDB connection", () => {
     await getDb();
     expect(mockConnect).toHaveBeenCalledTimes(1);
     expect(log).toHaveBeenCalledWith("warn", "could not create the unique email index", { error: "E11000 duplicate key" });
+  });
+
+  it("passes the username and password as options, so special characters need no encoding", async () => {
+    mockConnect.mockResolvedValue({ db: jest.fn().mockReturnValue(fakeDb()) });
+    process.env.MONGODB_URI = "mongodb://mongo-service:27017";
+    process.env.MONGODB_USERNAME = "admin";
+    process.env.MONGODB_PASSWORD = "p@ss:w/rd%";
+
+    const { getDb } = await import("./mongodb");
+    const { MongoClient } = await import("mongodb");
+    await getDb();
+
+    expect(MongoClient).toHaveBeenCalledWith("mongodb://mongo-service:27017", {
+      auth: { username: "admin", password: "p@ss:w/rd%" },
+    });
   });
 });

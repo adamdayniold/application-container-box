@@ -3,6 +3,8 @@ import { log } from "./logger";
 
 const uri = process.env.MONGODB_URI;
 const databaseName = process.env.MONGODB_DB ?? "canvas";
+const username = process.env.MONGODB_USERNAME;
+const password = process.env.MONGODB_PASSWORD;
 
 const globalForMongo = globalThis as typeof globalThis & {
   mongoClientPromise?: Promise<MongoClient>;
@@ -23,7 +25,8 @@ export async function getDb() {
 }
 
 async function connect(connectionUri: string) {
-  const client = await new MongoClient(connectionUri).connect();
+  const options = username && password ? { auth: { username, password } } : {};
+  const client = await new MongoClient(connectionUri, options).connect();
   try {
     await client
       .db(databaseName)
