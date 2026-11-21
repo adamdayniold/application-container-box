@@ -13,7 +13,9 @@ services:
       - /app/node_modules
       - /app/.next
     environment:
-      - MONGODB_URI=mongodb://${MONGODB_USERNAME}:${MONGODB_PASSWORD}@mongodb:27017
+      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_USERNAME=${MONGODB_USERNAME}
+      - MONGODB_PASSWORD=${MONGODB_PASSWORD}
       - MONGODB_DB=${MONGODB_DB}
     depends_on:
       - mongodb
