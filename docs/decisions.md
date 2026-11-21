@@ -155,3 +155,13 @@ Short notes on why the pipeline and the image work the way they do, and what eac
 **Trade-off:** on a platform without a prebuilt binary, `npm ci` could fail or a tool could lack its fallback. The fix then is to set that one package to `true`. The entries have no version, so a Dependabot bump does not bring the warning back.
 
 **Checked on 2026-11-22:** with both denied, `npm install-scripts ls` reports no unreviewed scripts, `npm ci` ends without the warning, 57 tests, lint and `tsc` pass, and the CI `test` and Docker `build-dev` jobs on `development` are green. Found while doing it: `npm install-scripts deny ... --dry-run` wrote the entries to `package.json` anyway, so trust `git diff`, not the flag.
+
+## `test-exclude` is overridden to version 8; `whatwg-encoding` is left alone
+
+**Decision:** `package.json` has `"overrides": { "test-exclude": "^8.0.0" }`. It makes the coverage tooling (`jest` → `@jest/transform` → `babel-plugin-istanbul` → `test-exclude`) use `glob@13`, the version Jest's reporters already use, instead of the deprecated `glob@10.5.0`. `whatwg-encoding@3.1.1` (deprecated, pulled in by `jsdom@26` through `jest-environment-jsdom`) is not overridden.
+
+**Why:** Both are dev-only and neither is in the image (`npm audit --omit=dev` reports 0). The `glob` override is small and its only user is the coverage report, so it is cheap to test. The `jsdom` fix would mean forcing jsdom 26 to 31 under every page test, and Jest does not support jsdom 31 yet (`jest-environment-jsdom@30.5.2` pins `^26.1.0`), so a cosmetic deprecation notice is not worth risking the tests that gate every release.
+
+**Trade-off:** The override forces a major version that `babel-plugin-istanbul` has not declared. It is only exercised by `npm run coverage`. Dependabot will not say when it becomes unnecessary: **delete the override once `babel-plugin-istanbul` depends on `test-exclude ^8` itself** (check with `npm view babel-plugin-istanbul dependencies.test-exclude`). Remove it the same way for `whatwg-encoding` when `jest-environment-jsdom` moves to a newer `jsdom`.
+
+**Checked on 2026-11-22:** after the override `npm ls glob` shows no `glob@10`, 22 packages were removed, `npm run coverage` ran (99.68% statements and lines) and the 57 tests, lint and `tsc` passed. The CI `test` and Docker `build-dev` jobs on `development` are green.
