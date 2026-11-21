@@ -20,6 +20,7 @@ A Next.js + MongoDB contacts CRUD app, packaged as a container image (`linux/amd
 - **Structured JSON logs:** one JSON line per request (method, route pattern, status, duration, and the error message when a handler throws), written to stdout. Alloy ships it to Loki, where `| json` turns each field into something to filter on. Request bodies are never logged.
 - **Immutable image tags in the cluster:** the Helm chart pins `sha-<commit>`, so the running image is provable and reproducible, and the node cannot keep a stale cached `:stage`.
 - **Image scanning before the push:** `build-stage` builds the image, scans it with Trivy and only then pushes it, so an image with a fixable CRITICAL or HIGH vulnerability never gets a `:sha-<commit>` tag and cannot be promoted. The production image also has npm, Yarn and corepack removed, since the app only runs `node server.js` and their bundled packages were the only findings.
+- **A hardened pod:** the Helm chart runs the container as uid 1001 with a read-only root filesystem, no Linux capabilities, no privilege escalation and the default seccomp profile. The app needs no writable path, and this was checked both locally with `docker run --read-only --cap-drop ALL` and in the cluster (see `docs/decisions.md`).
 - **Jest tests and lint** gate the pipeline.
 - **One Node version (24 LTS)** from `.nvmrc`, used by local development, CI and the image.
 
@@ -170,6 +171,7 @@ Dependabot (`.github/dependabot.yaml`) checks npm, Docker and GitHub Actions wee
 - Branch protection on `main` is the `protect-main` ruleset (status check `test`, linear history, no force pushes or deletions, no bypass). It requires no pull request, so the fast-forward release push still works. It has been enforced since the repository became public, and both the fast-forward release push and the hotfix pull request flow have been run against it.
 - The Helm chart pins an immutable `sha-<commit>` tag, but the tag is bumped by hand after each `stage` build. Planned: Flux image automation (needs a sortable tag format from CI).
 - The cluster runs the `stage` build; the Helm chart does not reference `:production` yet, so promotion to `main` is a retag in the registry and does not itself change what the cluster runs.
+- The pod's `runAsUser: 1001` is hard-coded in the Helm chart and must match the `nextjs` uid in the `Dockerfile`. If the app ever needs a writable path, the fix is an `emptyDir` at that path, not a writable root filesystem.
 - No authentication.
 - The contact search is an unanchored, case-insensitive regex over four fields. MongoDB cannot use an index for it, so it scans the collection. Fine for a demo-sized list; a text index or a search service would be the next step (see `docs/decisions.md`).
 - Email uniqueness is enforced by a unique index (case-insensitive), created when the app first connects. If the database already contains duplicate emails the index cannot be built: the app logs a warning and runs with the lookup check only, which is not atomic, until the duplicates are removed and the app restarts (see `docs/decisions.md`). Duplicates that already existed are never deleted automatically.
