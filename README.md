@@ -114,6 +114,7 @@ npm run dev        # needs MONGODB_URI and MONGODB_DB, put them in .env.local (s
 | Variable | Purpose |
 | --- | --- |
 | `MONGODB_URI` | MongoDB connection string. Required; the app errors without it. |
+| `MONGODB_USERNAME`, `MONGODB_PASSWORD` | Optional. When both are set, the app passes them to the driver as options, so the password may contain `@ : / %` without URL-encoding. Then `MONGODB_URI` should hold only the host, for example `mongodb://mongo-service:27017`. If credentials are also inside the URI, these two win. |
 | `MONGODB_DB` | Database name. Defaults to `canvas` if unset. |
 | `PORT` | Port the production image listens on (`3000`). |
 | `HOSTNAME` | Interface the production image binds to (`0.0.0.0`). |
@@ -172,6 +173,7 @@ Dependabot (`.github/dependabot.yaml`) checks npm, Docker and GitHub Actions wee
 - The Helm chart pins an immutable `sha-<commit>` tag, but the tag is bumped by hand after each `stage` build. Planned: Flux image automation (needs a sortable tag format from CI).
 - The cluster runs the `stage` build; the Helm chart does not reference `:production` yet, so promotion to `main` is a retag in the registry and does not itself change what the cluster runs.
 - The pod's `runAsUser: 1001` is hard-coded in the Helm chart and must match the `nextjs` uid in the `Dockerfile`. If the app ever needs a writable path, the fix is an `emptyDir` at that path, not a writable root filesystem.
+- The Helm chart and `docker-compose.yaml` still put the credentials inside `MONGODB_URI` (`mongodb://user:password@host`). The app can take them separately (see the environment variables), but until the chart and compose file are switched, a password with `@ : / %` still breaks the connection with `ERR_INVALID_URL`; keep passwords URL-safe there.
 - No authentication.
 - The contact search is an unanchored, case-insensitive regex over four fields. MongoDB cannot use an index for it, so it scans the collection. Fine for a demo-sized list; a text index or a search service would be the next step (see `docs/decisions.md`).
 - Email uniqueness is enforced by a unique index (case-insensitive), created when the app first connects. If the database already contains duplicate emails the index cannot be built: the app logs a warning and runs with the lookup check only, which is not atomic, until the duplicates are removed and the app restarts (see `docs/decisions.md`). Duplicates that already existed are never deleted automatically.
