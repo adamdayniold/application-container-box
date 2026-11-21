@@ -165,3 +165,13 @@ Short notes on why the pipeline and the image work the way they do, and what eac
 **Trade-off:** The override forces a major version that `babel-plugin-istanbul` has not declared. It is only exercised by `npm run coverage`. Dependabot will not say when it becomes unnecessary: **delete the override once `babel-plugin-istanbul` depends on `test-exclude ^8` itself** (check with `npm view babel-plugin-istanbul dependencies.test-exclude`). Remove it the same way for `whatwg-encoding` when `jest-environment-jsdom` moves to a newer `jsdom`.
 
 **Checked on 2026-11-22:** after the override `npm ls glob` shows no `glob@10`, 22 packages were removed, `npm run coverage` ran (99.68% statements and lines) and the 57 tests, lint and `tsc` passed. The CI `test` and Docker `build-dev` jobs on `development` are green.
+
+## Dependabot's Node 26 pull request is closed on purpose
+
+**Decision:** The pull request that bumps the `node` image in the `Dockerfile` from `24.22.2-alpine3.24` to `26.13.1-alpine3.24` is closed with `@dependabot ignore this major version`. The runtime stays on Node 24 LTS until the whole toolchain moves at once.
+
+**Why:** Node 24 is not set in one place. It is in `.nvmrc` (which CI reads), `engines` and `@types/node ^24` in `package.json`, and the `Dockerfile`. Dependabot would only change the `Dockerfile`, so the image would run Node 26 while lint, type checks and tests ran on Node 24, which breaks the rule that development, CI and the image use one version. Node 26 is a supported LTS, so the upgrade is wanted later, as one deliberate change across all of those places.
+
+**Trade-off:** The ignore rule did not stick the first time (an earlier Node 26 pull request was closed the same way and a new one appeared with the next patch release), so expect it to come back. If it does, add an explicit `ignore:` entry for the major version to `.github/dependabot.yaml`; that file only takes effect once it is on `main`, so it goes out with a release.
+
+**Checked on 2026-11-22:** the two other open pull requests were handled differently. `@testing-library/user-event` (patch, dev-only) was merged after its checks passed. `mongodb` 7.6.0 to 7.9.0 is a production dependency whose unit tests mock the driver, so a green check proved little: it was merged, then run against a real MongoDB 8.0 with `docker compose` (password `p@ss:w/rd%`, driver `7.9.0` inside the container, `200` on the list, the `email_1` unique index with the case-insensitive collation, `201` on create, `409` on a duplicate in another case, `200` on update with its own email, `204` on delete) before the release through `stage` (Trivy passed), the Helm tag bump (pod `1/1 Running`, Image ID equal to the `stage` digest) and `main`.
