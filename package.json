@@ -42,5 +42,8 @@
   "allowScripts": {
     "@parcel/watcher": false,
     "unrs-resolver": false
+  },
+  "overrides": {
+    "test-exclude": "^8.0.0"
   }
 }
